@@ -56,12 +56,18 @@ namespace MediaTekDocuments.manager
         /// <summary>
         /// Envoi une demande à l'API et récupère la réponse
         /// </summary>
-        /// <typeparam name="T">type d'une des classes du model</typeparam>
         /// <param name="methode">verbe http (GET, POST, PUT, DELETE)</param>
         /// <param name="message">message à envoyer dans l'URL</param>
+        /// <param name="parametres">contenu de variables à mettre dans body</param>
         /// <returns>liste d'objets (select) ou liste vide (ok) ou null si erreur</returns>
-        public JObject RecupDistant(string methode, string message)
+        public JObject RecupDistant(string methode, string message, String parametres)
         {
+            // transformation des paramètres pour les mettre dans le body
+            StringContent content = null;
+            if(!(parametres is null))
+            {
+                content = new StringContent(parametres, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
+            }
             // envoi du message et attente de la réponse
             switch (methode)
             {
@@ -69,10 +75,10 @@ namespace MediaTekDocuments.manager
                     httpResponse = httpClient.GetAsync(message).Result;
                     break;
                 case "POST":
-                    httpResponse = httpClient.PostAsync(message, null).Result;
+                    httpResponse = httpClient.PostAsync(message, content).Result;
                     break;
                 case "PUT":
-                    httpResponse = httpClient.PutAsync(message, null).Result;
+                    httpResponse = httpClient.PutAsync(message, content).Result;
                     break;
                 case "DELETE":
                     httpResponse = httpClient.DeleteAsync(message).Result;

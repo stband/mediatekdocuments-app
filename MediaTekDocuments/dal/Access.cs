@@ -6,6 +6,7 @@ using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
 using System.Configuration;
+using System.Linq;
 
 namespace MediaTekDocuments.dal
 {
@@ -75,7 +76,7 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Genre</returns>
         public List<Categorie> GetAllGenres()
         {
-            IEnumerable<Genre> lesGenres = TraitementRecup<Genre>(GET, "genre");
+            IEnumerable<Genre> lesGenres = TraitementRecup<Genre>(GET, "genre", null);
             return new List<Categorie>(lesGenres);
         }
 
@@ -85,7 +86,7 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Rayon</returns>
         public List<Categorie> GetAllRayons()
         {
-            IEnumerable<Rayon> lesRayons = TraitementRecup<Rayon>(GET, "rayon");
+            IEnumerable<Rayon> lesRayons = TraitementRecup<Rayon>(GET, "rayon", null);
             return new List<Categorie>(lesRayons);
         }
 
@@ -95,7 +96,7 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Public</returns>
         public List<Categorie> GetAllPublics()
         {
-            IEnumerable<Public> lesPublics = TraitementRecup<Public>(GET, "public");
+            IEnumerable<Public> lesPublics = TraitementRecup<Public>(GET, "public", null);
             return new List<Categorie>(lesPublics);
         }
 
@@ -105,7 +106,7 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Livre</returns>
         public List<Livre> GetAllLivres()
         {
-            List<Livre> lesLivres = TraitementRecup<Livre>(GET, "livre");
+            List<Livre> lesLivres = TraitementRecup<Livre>(GET, "livre", null);
             return lesLivres;
         }
 
@@ -115,7 +116,7 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Dvd</returns>
         public List<Dvd> GetAllDvd()
         {
-            List<Dvd> lesDvd = TraitementRecup<Dvd>(GET, "dvd");
+            List<Dvd> lesDvd = TraitementRecup<Dvd>(GET, "dvd", null);
             return lesDvd;
         }
 
@@ -125,7 +126,7 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Revue</returns>
         public List<Revue> GetAllRevues()
         {
-            List<Revue> lesRevues = TraitementRecup<Revue>(GET, "revue");
+            List<Revue> lesRevues = TraitementRecup<Revue>(GET, "revue", null);
             return lesRevues;
         }
 
@@ -138,7 +139,7 @@ namespace MediaTekDocuments.dal
         public List<Exemplaire> GetExemplairesRevue(string idDocument)
         {
             String jsonIdDocument = convertToJson("id", idDocument);
-            List<Exemplaire> lesExemplaires = TraitementRecup<Exemplaire>(GET, "exemplaire/" + jsonIdDocument);
+            List<Exemplaire> lesExemplaires = TraitementRecup<Exemplaire>(GET, "exemplaire/" + jsonIdDocument, null);
             return lesExemplaires;
         }
 
@@ -150,16 +151,16 @@ namespace MediaTekDocuments.dal
         public bool CreerExemplaire(Exemplaire exemplaire)
         {
             String jsonExemplaire = JsonConvert.SerializeObject(exemplaire, new CustomDateTimeConverter());
-            try {
-                // récupération soit d'une liste vide (requête ok) soit de null (erreur)
-                List<Exemplaire> liste = TraitementRecup<Exemplaire>(POST, "exemplaire/" + jsonExemplaire);
+            try
+            {
+                List<Exemplaire> liste = TraitementRecup<Exemplaire>(POST, "exemplaire", "champs=" + jsonExemplaire);
                 return (liste != null);
             }
             catch (Exception ex)
             {
                 Console.WriteLine(ex.Message);
             }
-            return false; 
+            return false;
         }
 
         /// <summary>
@@ -167,14 +168,16 @@ namespace MediaTekDocuments.dal
         /// </summary>
         /// <typeparam name="T"></typeparam>
         /// <param name="methode">verbe HTTP (GET, POST, PUT, DELETE)</param>
-        /// <param name="message">information envoyée</param>
+        /// <param name="message">information envoyée dans l'url</param>
+        /// <param name="parametres">paramètres à envoyer dans le body, au format "chp1=val1&chp2=val2&..."</param>
         /// <returns>liste d'objets récupérés (ou liste vide)</returns>
-        private List<T> TraitementRecup<T> (String methode, String message)
+        private List<T> TraitementRecup<T> (String methode, String message, String parametres)
         {
+            // trans
             List<T> liste = new List<T>();
             try
             {
-                JObject retour = api.RecupDistant(methode, message);
+                JObject retour = api.RecupDistant(methode, message, parametres);
                 // extraction du code retourné
                 String code = (String)retour["code"];
                 if (code.Equals("200"))
