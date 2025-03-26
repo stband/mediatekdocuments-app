@@ -1,19 +1,18 @@
-﻿using MediaTekDocuments.view;
+using MediaTekDocuments.view;
 using System;
 using System.Windows.Forms;
 
 namespace MediaTekDocuments
 {
-    static class Program
+    internal static class Program
     {
         /// <summary>
-        /// Point d'entrée principal de l'application.
+        ///  The main entry point for the application.
         /// </summary>
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
+            ApplicationConfiguration.Initialize();
             Application.Run(new FrmMediatek());
         }
     }

@@ -27,7 +27,7 @@ namespace MediaTekDocuments.view
         internal FrmMediatek()
         {
             InitializeComponent();
-            this.controller = new FrmMediatekController();
+                this.controller = new FrmMediatekController();
         }
 
         /// <summary>

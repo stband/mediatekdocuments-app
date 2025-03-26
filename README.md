@@ -1,6 +1,17 @@
 # MediatekDocuments
-Cette application permet de gérer les documents (livres, DVD, revues) d'une médiathèque. Elle a été codée en C# sous Visual Studio 2019. C'est une application de bureau, prévue d'être installée sur plusieurs postes accédant à la même base de données.<br>
+Cette application permet de gérer les documents (livres, DVD, revues) d'une médiathèque.  
+Elle a été initialement codée en C# sous Visual Studio 2019, **mais une migration vers .NET 8 et Visual Studio 2022 a été réalisée** afin de garantir la pérennité du projet.
+
+En effet, Visual Studio 2019 est désormais obsolète et difficilement installable, ce qui posait un problème de compatibilité pour les environnements modernes.  
+Cette migration permet donc :
+- de **travailler avec les dernières versions d'outils (Visual Studio 2022 / .NET 8)**,
+- de **profiter des performances améliorées** et du support à long terme du framework .NET 8,
+- d'**assurer la compatibilité sur les postes actuels**.
+- et d'**utiliser des dépendances et bibliothèques à jour**, contrairement à la version initiale qui s'appuyait sur des packages obsolètes.
+
+C'est une application de bureau, prévue d'être installée sur plusieurs postes accédant à la même base de données.<br>
 L'application exploite une API REST pour accéder à la BDD MySQL. Des explications sont données plus loin, ainsi que le lien de récupération.
+
 ## Présentation
 Actuellement l'application est partiellement codée. Voici les fonctionnalités actuellement opérationnelles : recherches et affichage d'informations sur les documents de la médiathèque (livres, DVD, revues), réception de nouveaux numéros de revues.<br>
 ![img1](https://github.com/CNED-SLAM/MediaTekDocuments/assets/100127886/9b5a4c1b-6914-4455-94bf-fec24adba3ec)
@@ -65,13 +76,54 @@ Enfin, 3 tables permettent de mémoriser les données concernant les commandes d
 <br>
 La base de données est remplie de quelques exemples pour pouvoir tester son application. Dans les champs image (de Document) et photo (de Exemplaire) doit normalement se trouver le chemin complet vers l'image correspondante. Pour les tests, vous devrez créer un dossier, le remplir de quelques images et mettre directement les chemins dans certains tuples de la base de données qui, pour le moment, ne contient aucune image.<br>
 Lorsque l'application sera opérationnelle, c'est le personnel de la médiathèque qui sera en charge de saisir les informations des documents.
+
 ## L'API REST
+
 L'accès à la BDD se fait à travers une API REST protégée par une authentification basique.<br>
 Le code de l'API se trouve ici :<br>
-https://github.com/CNED-SLAM/rest_mediatekdocuments<br>
-avec toutes les explications pour l'utiliser (dans le readme).
-## Installation de l'application
-Ce mode opératoire permet d'installer l'application pour pouvoir travailler dessus.<br>
-- Installer Visual Studio 2019 entreprise et les extension Specflow et newtonsoft.json (pour ce dernier, voir l'article "Accéder à une API REST à partir d'une application C#" dans le wiki de ce dépôt : consulter juste le début pour la configuration, car la suite permet de comprendre le code existant).<br>
-- Télécharger le code et le dézipper puis renommer le dossier en "mediatekdocuments".<br>
-- Récupérer et installer l'API REST nécessaire (https://github.com/CNED-SLAM/rest_mediatekdocuments) ainsi que la base de données (les explications sont données dans le readme correspondant).
+https://github.com/stband/mediatekdocuments-rest-api<br>
+avec toutes les explications pour l'utiliser (dans le README).
+
+## Installation de l’application
+
+### Prérequis
+
+- .NET SDK 8.0 (LTS)  
+- Visual Studio 2022 (Community ou Enterprise)
+- WAMP/XAMPP avec MySQL en service  
+- Git
+
+### Cloner le dépôt
+
+Cloner le dépôt depuis le répertoire de destination
+```bash
+git clone https://github.com/stband/mediatekdocuments-app.git
+cd mediatekdocuments-app
+```
+### Récupérer et installer l'API REST
+
+- L'API REST est disponible ici : (https://github.com/stband/mediatekdocuments-rest-api).
+- Elle contient aussi la base de données et les explications pour tout configurer (dans le README correspondant).
+
+### Configurer et lancer l'application
+
+Dans la CLI (powershell/cmd)
+
+1. Restaurer tous les packages NuGet
+
+```bash
+dotnet restore
+```
+
+2. Compiler le projet
+dotnet build
+
+```bash
+dotnet build
+```
+
+3. Lancer l’application WinForms
+
+```bash
+dotnet run --project MediaTekDocuments
+```
