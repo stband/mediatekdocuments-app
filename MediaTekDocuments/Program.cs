@@ -13,7 +13,7 @@ namespace MediaTekDocuments
         static void Main()
         {
             ApplicationConfiguration.Initialize();
-            Application.Run(new FrmMediatek());
+            Application.Run(new FrmSuiviCommandes());
         }
     }
 }

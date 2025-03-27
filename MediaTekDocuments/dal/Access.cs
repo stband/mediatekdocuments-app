@@ -19,24 +19,36 @@ namespace MediaTekDocuments.dal
         /// adresse de l'API
         /// </summary>
         private static readonly string uriApi = "http://localhost/rest_mediatekdocuments/";
+        
         /// <summary>
         /// instance unique de la classe
         /// </summary>
         private static Access instance = null;
+        
         /// <summary>
         /// instance de ApiRest pour envoyer des demandes vers l'api et recevoir la réponse
         /// </summary>
         private readonly ApiRest api = null;
+        
         /// <summary>
         /// méthode HTTP pour select
         /// </summary>
         private const string GET = "GET";
+        
         /// <summary>
         /// méthode HTTP pour insert
         /// </summary>
         private const string POST = "POST";
-        /// <summary>
+        
         /// méthode HTTP pour update
+        /// </summary>
+        private const string PUT = "PUT";
+
+        /// <summary>
+        /// méthode HTTP pour delete
+        /// </summary>
+        private const string DELETE = "DELETE";
+
 
         /// <summary>
         /// Méthode privée pour créer un singleton
@@ -241,6 +253,74 @@ namespace MediaTekDocuments.dal
             public override void WriteJson(JsonWriter writer, bool value, JsonSerializer serializer)
             {
                 serializer.Serialize(writer, value);
+            }
+        }
+
+        public List<Commande> GetToutesCommandes()
+        {
+            return TraitementRecup<Commande>(GET, "commandes", null);
+        }
+
+        public List<Commande> GetCommandesById(string idLivreDvd)
+        {
+            string json = convertToJson("idLivreDvd", idLivreDvd);
+            return TraitementRecup<Commande>(GET, "commandesparid/" + json, null);
+        }
+
+        public bool CreerCommandeComplete(Commande commande)
+        {
+            var donnees = new
+            {
+                idLivreDvd = commande.IdLivreDvd,
+                nbExemplaire = commande.NbExemplaires,
+                montant = commande.Montant,
+                dateCommande = commande.DateCommande.ToString("yyyy-MM-dd")
+            };
+
+            string json = JsonConvert.SerializeObject(donnees, new CustomDateTimeConverter());
+            try
+            {
+                var result = TraitementRecup<Commande>(POST, "commandetotale", "champs=" + json);
+                return result != null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
+            }
+        }
+
+        public bool ModifierStatutCommande(string idCommande, string nouvelIdSuivi)
+        {
+            var data = new Dictionary<string, string>
+            {
+                { "idSuivi", nouvelIdSuivi }
+            };
+            string json = JsonConvert.SerializeObject(data);
+            try
+            {
+                var result = TraitementRecup<Commande>(PUT, "commandedocument", "id=" + idCommande + "&champs=" + json);
+                return result != null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
+            }
+        }
+
+        public bool SupprimerCommande(string idCommande)
+        {
+            string json = convertToJson("id", idCommande);
+            try
+            {
+                var result = TraitementRecup<Commande>(DELETE, "commande/" + json, null);
+                return result != null;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+                return false;
             }
         }
 
