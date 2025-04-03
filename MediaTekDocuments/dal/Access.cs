@@ -281,6 +281,41 @@ namespace MediaTekDocuments.dal
             return TraitementRecup<Commande>(GET, "commandeparid/" + json, null);
         }
 
+        public Utilisateur SeConnecter(string login, string mdp)
+        {
+            var donnees = new Dictionary<string, string>
+    {
+        { "login", login },
+        { "mdp", mdp }
+    };
+
+            string json = JsonConvert.SerializeObject(donnees);
+
+            try
+            {
+                JObject retour = api.RecupDistant(POST, "connexion", "champs=" + json);
+
+                if (retour["code"].ToString() == "200")
+                {
+                    string resultString = JsonConvert.SerializeObject(retour["result"]);
+                    Utilisateur utilisateur = JsonConvert.DeserializeObject<Utilisateur>(resultString);
+                    return utilisateur;
+                }
+                else
+                {
+                    Console.WriteLine("Erreur de connexion : " + retour["message"]);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine("Erreur API : " + ex.Message);
+                return null;
+            }
+        }
+
+
+
         /// <summary>
         /// Crée une commande complète en enregistrant les informations de commande.
         /// </summary>

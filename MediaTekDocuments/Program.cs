@@ -4,16 +4,21 @@ using System.Windows.Forms;
 
 namespace MediaTekDocuments
 {
+    /// <summary>
+    /// Point d’entrée principal de l’application.
+    /// Configure l’environnement Windows Forms et lance le formulaire de connexion.
+    /// </summary>
     internal static class Program
     {
         /// <summary>
-        ///  The main entry point for the application.
+        /// Méthode principale démarrant l’application.
+        /// Initialise la configuration Windows Forms et affiche le formulaire de connexion qui permet à l'utilisateur de s'identifier.
         /// </summary>
         [STAThread]
         static void Main()
         {
             ApplicationConfiguration.Initialize();
-            Application.Run(new FrmAccueil());
+            Application.Run(new FrmConnexion());
         }
     }
 }
