@@ -1,12 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
-using MediaTekDocuments.model;
+﻿using MediaTekDocuments.model;
 using MediaTekDocuments.manager;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
-using System.Configuration;
-using System.Linq;
+using NLog;
 
 namespace MediaTekDocuments.dal
 {
@@ -17,6 +14,10 @@ namespace MediaTekDocuments.dal
     /// </summary>
     public class Access
     {
+        /// <summary>
+        /// Objet pour gérer les logs via Nlog.
+        /// </summary>
+        private static readonly Logger logger = LogManager.GetCurrentClassLogger();
 
         /// <summary>
         /// Adresse de l'API REST.
@@ -60,6 +61,7 @@ namespace MediaTekDocuments.dal
         /// </summary>
         private Access()
         {
+            logger.Info("Constructeur Access private appelé, instance créée");
             String authenticationString;
             try
             {
@@ -68,7 +70,7 @@ namespace MediaTekDocuments.dal
             }
             catch (Exception e)
             {
-                Console.WriteLine(e.Message);
+                logger.Error(e, "Initialisation de l'API REST échouée");
                 Environment.Exit(0);
             }
         }
@@ -174,7 +176,7 @@ namespace MediaTekDocuments.dal
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                logger.Error(ex, "Création d'exemplaire échouée");
             }
             return false;
         }
@@ -208,11 +210,11 @@ namespace MediaTekDocuments.dal
                 }
                 else
                 {
-                    Console.WriteLine("code erreur = " + code + " message = " + (String)retour["message"]);
+                    logger.Warn("API a répondu code={0}, message={1}", code, retour["message"]);
                 }
             }catch(Exception e)
             {
-                Console.WriteLine("Erreur lors de l'accès à l'API : "+e.Message);
+                logger.Error(e, "Exception dans TraitementRecup<{0}>", typeof(T).Name);
                 Environment.Exit(0);
             }
             return liste;
@@ -284,10 +286,10 @@ namespace MediaTekDocuments.dal
         public Utilisateur SeConnecter(string login, string mdp)
         {
             var donnees = new Dictionary<string, string>
-    {
-        { "login", login },
-        { "mdp", mdp }
-    };
+            {
+                { "login", login },
+                { "mdp", mdp }
+            };
 
             string json = JsonConvert.SerializeObject(donnees);
 
@@ -303,18 +305,16 @@ namespace MediaTekDocuments.dal
                 }
                 else
                 {
-                    Console.WriteLine("Erreur de connexion : " + retour["message"]);
+                    logger.Warn("Erreur de connexion : " + retour["message"]);
                     return null;
                 }
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Erreur API : " + ex.Message);
+                logger.Error(ex, "Erreur API");
                 return null;
             }
         }
-
-
 
         /// <summary>
         /// Crée une commande complète en enregistrant les informations de commande.
@@ -339,7 +339,7 @@ namespace MediaTekDocuments.dal
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                logger.Error(ex, "Échec création de commande");
                 return false;
             }
         }
@@ -364,7 +364,7 @@ namespace MediaTekDocuments.dal
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                logger.Error(ex, "Échec mise à jour du statut commande : {0}", idCommande);
                 return false;
             }
         }
@@ -384,7 +384,7 @@ namespace MediaTekDocuments.dal
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                logger.Error(ex, "Échec suppression commande {0}", idCommande);
                 return false;
             }
         }
@@ -424,7 +424,7 @@ namespace MediaTekDocuments.dal
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Erreur lors de la création d'un abonnement : " + ex.Message);
+                logger.Error(ex, "Échec création abonnement pour la revue : {0}", abonnement.IdRevue);
                 return false;
             }
         }
@@ -444,7 +444,7 @@ namespace MediaTekDocuments.dal
             }
             catch (Exception ex)
             {
-                Console.WriteLine("Erreur lors de la suppression de l'abonnement : " + ex.Message);
+                logger.Error(ex, "Échec suppression abonnement : {0}", idAbonnement);
                 return false;
             }
         }
