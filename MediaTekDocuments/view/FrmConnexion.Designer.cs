@@ -100,6 +100,7 @@
             Controls.Add(btnSeConnecter);
             Controls.Add(txtMotDePasse);
             Name = "FrmConnexion";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "Authentification";
             ((System.ComponentModel.ISupportInitialize)pictureBox1).EndInit();
             ResumeLayout(false);

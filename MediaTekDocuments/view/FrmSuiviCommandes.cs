@@ -1,49 +1,81 @@
 ﻿using MediaTekDocuments.controller;
 using MediaTekDocuments.model;
 using MediaTekDocuments.helper;
-using System.ComponentModel;
-using System.Data;
-using System.Reflection;
 
 namespace MediaTekDocuments.view
 {
+    /// <summary>
+    /// Fenêtre de suivi et création des commandes (toutes, livres, DVD).
+    /// </summary>
     public partial class FrmSuiviCommandes : Form
     {
-        // BindingSource pour centraliser la liaison des données pour chaque onglet.
-        private BindingSource bindingSourceCommandes = new BindingSource();
-        private BindingSource bindingSourceLivres = new BindingSource();
-        private BindingSource bindingSourceDVD = new BindingSource();
+
+        #region constantes de la classe
+
+        private const string PlaceholderText = "Rechercher";
+        private const string MessageErreur = "Erreur";
+        private const string MessageAlerte = "Alerte";
+        private const string MessageInformation = "Information";
+        private const string MessageSucces = "Succès";
+        private const string IdBase = "00000";
         
-        private FrmSuiviCommandesController controller;
+        private const string StatutEnCours = "en cours";
+        private const string StatutReglee = "réglée";
+        private const string StatutLivree = "livrée";
+        private const string StatutRelancee = "relancée";
 
+        private const string ColRayon = "Rayon";
+        private const string ColGenre = "Genre";
+        private const string ColPublic = "Public";
+        private const string ColTitre = "Titre";
+        private const string ColSuivi = "Suivi";
 
-        /// <summary>
-        /// Événement de chargement du formulaire.
-        /// Initialise l'affichage en chargeant toutes les commandes.
-        /// </summary>
-        private void FrmSuiviCommandes_Load(object sender, EventArgs e)
-        {
-            ChargerToutesCommandes();
-        }
+        #endregion
+
+        #region bindingsource et données locales
+
+        // BindingSource pour centraliser la liaison des données pour chaque onglet.
+        private readonly BindingSource bindingSourceCommandes = [];
+        private readonly BindingSource bindingSourceLivres = [];
+        private readonly BindingSource bindingSourceDVD = [];
+
+        // Copie en mémoire pour reset les listes originales après un trie ou un filtre.
+        private List<Commande> commandesOriginaux = [];
+        private List<Livre> livresOriginaux = [];
+        private List<Dvd> dvdOriginaux = [];
+
+        // Contrôleur du formulaire unique
+        private readonly FrmSuiviCommandesController controller = new();
+
+        #endregion
 
         /// <summary>
         /// Constructeur du formulaire.
         /// Appelle InitializeComponent pour initialiser les composants graphiques.
         /// </summary>
-        public FrmSuiviCommandes()
-        {
-            InitializeComponent();
-        }
+        public FrmSuiviCommandes() => InitializeComponent();
+
+
+        /// <summary>
+        /// Gestionnaire de l'événement Load du formulaire.
+        /// Charge les commandes lors de l'initialisation.
+        /// </summary>
+        private void FrmSuiviCommandes_Load(object sender, EventArgs e) => ChargerToutesCommandes();
 
 
         ///////////////////////////////////////////////////
         //             Méthodes générales                //
         ///////////////////////////////////////////////////
 
+        #region Gestion des onglets
 
         /// <summary>
-        /// Gère le changement d'onglet.
-        /// Selon l'index de l'onglet sélectionné, recharge les données correspondantes.
+        /// Gère le changement d’onglet :  
+        /// <list type="bullet">
+        ///   <item><description>Onglet 1 : charge toutes les commandes.</description></item>
+        ///   <item><description>Onglet 2 : charge les livres.</description></item>
+        ///   <item><description>Onglet 3 : charge les DVD.</description></item>
+        /// </list>
         /// </summary>
         private void tabCommandes_SelectedIndexChanged(object sender, EventArgs e)
         {
@@ -63,99 +95,86 @@ namespace MediaTekDocuments.view
             }
         }
 
+        #endregion
 
-        ///////////////////////////////////////////////////
-        // Méthodes pour l'onglet 1 : commandes livres   //
-        ///////////////////////////////////////////////////
+        /////////////////////////////////////////////////////
+        // Méthodes pour l'onglet 1 : toutes les commandes //
+        /////////////////////////////////////////////////////
 
-
-        /// <summary>
-        /// Gère l'affichage des commandes dans le DataGridView.
-        /// Configure les titres des colonnes et le mode de tri.
-        /// </summary>
-        private void AfficherToutesCommandes(List<Commande> commandes)
-        {
-            bindingSourceCommandes.DataSource = new BindingList<Commande>(commandes);
-            dgvToutesCommandes.DataSource = bindingSourceCommandes;
-
-            dgvToutesCommandes.Columns["Id"].HeaderText = "N° commande";
-            dgvToutesCommandes.Columns["Titre"].HeaderText = "Titre";
-            dgvToutesCommandes.Columns["DateCommande"].HeaderText = "Date";
-            dgvToutesCommandes.Columns["Montant"].HeaderText = "Montant (€)";
-            dgvToutesCommandes.Columns["NbExemplaires"].HeaderText = "Exemplaires";
-            dgvToutesCommandes.Columns["Suivi"].HeaderText = "Statut";
-        }
+        #region Onglet 1 — Toutes les commandes
 
         /// <summary>
-        /// Réinitialise la TextBox de recherche et recharge les données.
-        /// </summary>
+        /// Réinitialise la textBox de recherche et recharge la liste complète des commandes.
+        /// </summary>.
         private void btnClear1_Click(object sender, EventArgs e)
         {
-            UIHelper.ClearTextBox(txtRecherche1, "Rechercher");
+            UIHelper.ClearTextBox(txtRecherche1, PlaceholderText);
             ChargerToutesCommandes();
         }
 
         /// <summary>
-        /// Bouton permettant de modifier le statut d'une commande sélectionnée.
+        /// Modifie le statut de la commande sélectionnée.
         /// Vérifie les règles métier et demande confirmation avant de procéder.
-        /// Utilise un mapping pour convertir le statut en code numérique.
+        /// Utilise un mapping pour convertir le texte du statut en code numérique,
+        /// pour assurer la compatibilité avec la BDD.
         /// </summary>
         private void btnModifierStatut_Click(object sender, EventArgs e)
         {
             if (dgvToutesCommandes.SelectedRows.Count == 0)
             {
-                MessageBox.Show("Veuillez sélectionner une commande.", "Alerte", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner une commande.", MessageAlerte, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             Commande commande = (Commande)dgvToutesCommandes.SelectedRows[0].DataBoundItem;
+            
             string statutActuel = commande.Suivi.ToLower();
-            string nouveauStatut = cbStatutCommande.SelectedItem.ToString().ToLower();
+            string nouveauStatut = cbStatutCommande.Text.ToLower();
 
             if (statutActuel == nouveauStatut)
             {
-                MessageBox.Show("Le statut sélectionné est déjà celui de la commande.", "Info", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                return;
-            }
-
-            // Règle : on ne peut pas revenir à un statut antérieur une fois la commande livrée ou réglée.
-            if ((statutActuel == "livrée" || statutActuel == "réglée") &&
-                (nouveauStatut == "en cours" || nouveauStatut == "relancée"))
-            {
-                MessageBox.Show("Impossible de revenir à un statut antérieur une fois la commande livrée ou réglée.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
-            }
-
-            // Règle : une commande ne peut être réglée que si elle est d'abord livrée.
-            if (nouveauStatut == "réglée" && statutActuel != "livrée")
-            {
-                MessageBox.Show("Une commande ne peut être réglée que si elle est d’abord livrée.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Le statut sélectionné est déjà celui de la commande.", MessageInformation, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 return;
             }
 
             // Règle : une commande réglée ne peut plus être modifiée.
-            if (statutActuel == "réglée")
+            if (statutActuel == StatutReglee)
             {
-                MessageBox.Show("Une commande réglée ne peut plus être modifiée.", "Action interdite", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Une commande réglée ne peut plus être modifiée.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Règle : une commande livrée peut seulement être payée.
+            if (statutActuel == StatutLivree && nouveauStatut != StatutReglee)
+            {
+                MessageBox.Show("Une commande livrée ne peut plus retourner à un statut antérieur.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
+                return;
+            }
+
+            // Règle : une commande ne peut être réglée que si elle est d'abord livrée.
+            if ((statutActuel == StatutEnCours || statutActuel == StatutRelancee) && nouveauStatut == StatutReglee)
+            {
+                MessageBox.Show("Une commande ne peut pas être réglée sans être préalablement livrée.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
             // Mapping pour convertir le texte du statut en code numérique (important pour la BDD).
-            Dictionary<string, string> statutMapping = new Dictionary<string, string>()
+            Dictionary<string, string> statutMapping = new()
             {
-                { "en cours", "00001" },
-                { "relancée", "00004" },
-                { "livrée", "00002" },
-                { "réglée", "00003" }
+                { StatutEnCours, "00001" },
+                { StatutRelancee, "00004" },
+                { StatutLivree, "00002" },
+                { StatutReglee, "00003" }
             };
 
-            if (!statutMapping.ContainsKey(nouveauStatut))
+            if (!statutMapping.TryGetValue(nouveauStatut, out string? value))
             {
-                MessageBox.Show("Le statut sélectionné est invalide.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Le statut sélectionné est invalide.", MessageAlerte, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            string nouveauStatutCode = statutMapping[nouveauStatut];
+            // L'équivalent du statut en code numérique (ex : "en cours" == 00001).
+            string statutCodeNumerique = value;
 
             DialogResult confirm = MessageBox.Show(
                 $"Êtes-vous sûr de vouloir modifier le statut de la commande {commande.Id} de '{statutActuel}' vers '{nouveauStatut}' ?",
@@ -167,43 +186,43 @@ namespace MediaTekDocuments.view
             if (confirm != DialogResult.Yes)
                 return;
 
-            bool success = controller.ModifierStatutCommande(commande.Id, nouveauStatutCode);
+            bool success = controller.ModifierStatutCommande(commande.Id, statutCodeNumerique);
 
             if (success)
             {
-                MessageBox.Show("Statut modifié avec succès !", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Statut modifié avec succès.", MessageSucces, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 ChargerToutesCommandes();
             }
             else
             {
-                MessageBox.Show("Erreur lors de la modification du statut.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Erreur lors de la modification du statut.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         /// <summary>
-        /// Bouton permettant de supprimer une commande.
-        /// Seule une commande en cours peut être supprimée.
+        /// Supprime la commande sélectionnée, sauf si son statut est "livrée" ou "réglée".
+        /// Affiche une confirmation et gère les erreurs.
         /// </summary>
         private void btnSupprimerCommande_Click(object sender, EventArgs e)
         {
             if (dgvToutesCommandes.SelectedRows.Count == 0)
             {
-                MessageBox.Show("Veuillez sélectionner une commande à supprimer.", "Alerte", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner une commande à supprimer.", MessageAlerte, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
-            DataGridViewRow selectedRow = dgvToutesCommandes.SelectedRows[0];
-            Commande commande = (Commande)selectedRow.DataBoundItem;
+            // Vérifie si la commande à un statut pouvant être supprimé.
+            var commande = (Commande)dgvToutesCommandes.SelectedRows[0].DataBoundItem;
+            string statutActuel = commande.Suivi.ToLower();
 
-            // Si la commande n'est pas "en cours" suppression interdite.
-            if (commande.Suivi.ToLower() != "en cours")
+            if (statutActuel == StatutLivree || statutActuel == StatutReglee)
             {
-                MessageBox.Show("Impossible de supprimer une commande livrée ou réglée.", "Suppression refusée", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Impossible de supprimer une commande livrée ou réglée.", "Suppression refusée", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 return;
             }
 
             DialogResult confirm = MessageBox.Show(
-                $"Êtes-vous sûr de vouloir supprimer la commande {commande.Id} ?",
+                $"Êtes-vous sûr de vouloir supprimer la commande n°{commande.Id} ?",
                 "Confirmation de suppression",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question
@@ -216,30 +235,101 @@ namespace MediaTekDocuments.view
 
             if (success)
             {
-                MessageBox.Show("Commande supprimée avec succès.", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Commande supprimée avec succès.", MessageSucces, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 ChargerToutesCommandes();
             }
             else
             {
-                MessageBox.Show("Erreur lors de la suppression de la commande.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Erreur lors de la suppression de la commande.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         /// <summary>
-        /// Charge et affiche toutes les commandes.
-        /// Initialise le contrôleur et met à jour l'interface avec le nombre de commandes.
+        /// Charge la liste complète des commandes (liées aux livres et DVD) et configure le DataGridView pour affichage, tri et mise en forme.
+        /// Configure le ComboBox cbRevue.
         /// </summary>
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item>
+        ///             <description>Récupère les données via le contrôleur <see cref="FrmSuiviCommandesController"/>.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Utilise <see cref="SortableBindingList{T}"/> pour activer le tri sur chaque colonne.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Définit l’ordre et le texte des en-têtes de colonnes.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Masque les colonnes techniques (IDs et images) non pertinentes pour l’utilisateur.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Appelle <see cref="AfficherNombreCommandes"/> qui affiche le nombre de commande du DataGridView.</description>
+        ///         </item>  
+        ///     </list>
+        /// </remarks>
         private void ChargerToutesCommandes()
         {
-            controller = new FrmSuiviCommandesController();
-            List<Commande> commandes = controller.GetToutesCommandes();
-            AfficherToutesCommandes(commandes);
-            lblResultat.Text = $"{commandes.Count} commande(s) affichée(s)";
+            // Récupère la liste des commandes via le contrôleur.
+            commandesOriginaux = controller.GetToutesCommandes();
+
+            // Rendre triable le BindingSourcee au travers de la classe helper SortableBindingList.
+            var sortableCommandes = new SortableBindingList<Commande>(commandesOriginaux);
+            bindingSourceCommandes.DataSource = sortableCommandes;
+            dgvToutesCommandes.DataSource = bindingSourceCommandes;
+
+            // Assurer le tri automatique pour chaque colonne.
+            foreach (DataGridViewColumn col in dgvToutesCommandes.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.Automatic;
+            }
+
+            dgvToutesCommandes.Columns["Id"].HeaderText = "N° commande";
+            dgvToutesCommandes.Columns[ColTitre].HeaderText = ColTitre;
+            dgvToutesCommandes.Columns["DateCommande"].HeaderText = "Date";
+            dgvToutesCommandes.Columns["Montant"].HeaderText = "Montant (€)";
+            dgvToutesCommandes.Columns["NbExemplaires"].HeaderText = "Exemplaires";
+            dgvToutesCommandes.Columns[ColSuivi].HeaderText = "Statut";
+
+            dgvToutesCommandes.Columns["Id"].DisplayIndex = 0;
+            dgvToutesCommandes.Columns[ColSuivi].DisplayIndex = 1;
+
+            AfficherNombreCommandes();
         }
 
         /// <summary>
-        /// Lorsqu'une cellule du DataGridView est cliquée,
-        /// met à jour le ComboBox du statut et affiche l'ID de la commande sélectionnée.
+        /// Applique une couleur de fond aux lignes du DataGridView selon le statut de la commande.
+        /// Utilisé pour améliorer la lisibilité et signaler visuellement l'état d'avancement d'une commande.
+        /// </summary>
+        private void dgvToutesCommandes_RowPrePaint(object sender, DataGridViewRowPrePaintEventArgs e)
+        {
+            var row = dgvToutesCommandes.Rows[e.RowIndex];
+            var statut = row.Cells[ColSuivi].Value as string;
+
+            // 1) Choix de la couleur de base
+            Color baseColor = statut switch
+            {
+                StatutEnCours => Color.Gold,
+                StatutRelancee => Color.Goldenrod,
+                StatutLivree => Color.SkyBlue,
+                StatutReglee => Color.LightGreen,
+                _ => Color.White
+            };
+
+            row.DefaultCellStyle.BackColor = baseColor;
+        }
+
+        /// <summary>
+        /// Met à jour le label du nombre de commandes affichées.
+        /// </summary>
+        private void AfficherNombreCommandes() => lblResultat.Text = $"{bindingSourceCommandes.Count} commande(s) affichée(s)";
+
+        /// <summary>
+        /// Lorsqu’une commande (ligne) du <see cref="dgvToutesCommandes"/> est cliquée :  
+        /// <list type="bullet">
+        ///   <item><description>Récupère l’objet <see cref="Commande"/> associé à la ligne sélectionnée.</description></item>
+        ///   <item><description>Synchronise le <see cref="ComboBox"/> <c>cbStatutCommande</c> pour refléter le statut (<c>Suivi</c>) de la commande.</description></item>
+        ///   <item><description>Met à jour le <c>Label</c> <c>lblIDCommandeSelectionne</c> pour afficher l’ID de la commande.</description></item>
+        /// </list>
         /// </summary>
         private void dgvToutesCommandes_CellClick(object sender, DataGridViewCellEventArgs e)
         {
@@ -247,145 +337,78 @@ namespace MediaTekDocuments.view
             {
                 DataGridViewRow ligne = dgvToutesCommandes.Rows[e.RowIndex];
                 Commande commande = (Commande)ligne.DataBoundItem;
+
+                // Synchronise le ComboBox et le Label avec la commande sélectionnée.
                 cbStatutCommande.SelectedItem = commande.Suivi;
                 lblIDCommandeSelectionne.Text = commande.Id;
             }
         }
 
-        // Variables pour gérer le tri des commandes.
-        private string currentSortColumn = "";
-        private ListSortDirection currentSortDirection = ListSortDirection.Ascending;
-
         /// <summary>
-        /// Permet de trier dynamiquement les commandes en cliquant sur l'en-tête des colonnes.
-        /// Le tri alterne entre croissant et décroissant.
+        /// Efface le placeholder "Rechercher" et modifie la couleur de la police pour permettre la saisie.
+        /// Utilise <see cref="UIHelper.GererEntreeTextBox"/>.
         /// </summary>
-        private void dgvToutesCommandes_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-        {
-            string columnName = dgvToutesCommandes.Columns[e.ColumnIndex].Name;
-
-            // Si la même colonne est cliquée, on inverse la direction ; sinon, on passe en Ascendant.
-            if (currentSortColumn == columnName)
-            {
-                currentSortDirection = currentSortDirection == ListSortDirection.Ascending
-                    ? ListSortDirection.Descending
-                    : ListSortDirection.Ascending;
-            }
-            else
-            {
-                currentSortColumn = columnName;
-                currentSortDirection = ListSortDirection.Ascending;
-            }
-
-            // Récupère la liste actuelle des commandes depuis le BindingSource.
-            List<Commande> commandes;
-            if (bindingSourceCommandes.DataSource is BindingList<Commande> bindingList)
-            {
-                commandes = bindingList.ToList();
-            }
-            else if (bindingSourceCommandes.DataSource is List<Commande> list)
-            {
-                commandes = list;
-            }
-            else
-            {
-                return;
-            }
-
-            // Trie la liste à l'aide de LINQ et reflection.
-            if (currentSortDirection == ListSortDirection.Ascending)
-            {
-                commandes = commandes.OrderBy(c => GetPropertyValue(c, columnName)).ToList();
-            }
-            else
-            {
-                commandes = commandes.OrderByDescending(c => GetPropertyValue(c, columnName)).ToList();
-            }
-
-            // Met à jour le BindingSource avec la liste triée.
-            bindingSourceCommandes.DataSource = new BindingList<Commande>(commandes);
-            dgvToutesCommandes.Refresh();
-
-            // Met à jour les glyphes de tri sur les en-têtes.
-            foreach (DataGridViewColumn col in dgvToutesCommandes.Columns)
-            {
-                col.HeaderCell.SortGlyphDirection = SortOrder.None;
-            }
-            dgvToutesCommandes.Columns[columnName].HeaderCell.SortGlyphDirection = currentSortDirection == ListSortDirection.Ascending
-                ? SortOrder.Ascending
-                : SortOrder.Descending;
-        }
+        private void txtRecherche1_Enter(object sender, EventArgs e) => UIHelper.GererEntreeTextBox(txtRecherche1, PlaceholderText);
 
         /// <summary>
-        /// Méthode utilitaire qui utilise la réflexion pour récupérer la valeur d'une propriété d'un objet.
-        /// Utile pour le tri dynamique.
+        /// Restaure le placeholder "Rechercher" si le textBox est vide et ajuste la couleur.
+        /// Utilise <see cref="UIHelper.GererSortieTextBox"/>.
         /// </summary>
-        private object GetPropertyValue(object obj, string propertyName)
-        {
-            PropertyInfo propInfo = obj.GetType().GetProperty(propertyName);
-            return propInfo != null ? propInfo.GetValue(obj, null) : null;
-        }
+        private void txtRecherche1_Leave(object sender, EventArgs e) => UIHelper.GererSortieTextBox(txtRecherche1, PlaceholderText);
 
         /// <summary>
-        /// Efface le placeholder et modifie la couleur de la police.
-        /// </summary>
-        private void txtRecherche1_Enter(object sender, EventArgs e)
-        {
-            UIHelper.GererEntreeTextBox(txtRecherche1, "Rechercher");
-        }
-
-        /// <summary>
-        /// Réaffiche le placeholder si le champ est vide.
-        /// </summary>
-        private void txtRecherche1_Leave(object sender, EventArgs e)
-        {
-            UIHelper.GererSortieTextBox(txtRecherche1, "Rechercher");
-        }
-
-        /// <summary>
-        /// Gestion de la recherche dynamique dans la TextBox.
-        /// Au fur et à mesure de la saisie, le DataGridView est filtré et le nombre de résultats est mis à jour.
+        /// Filtre dynamiquement la liste des commandes affichées dans le DataGridView
+        /// en fonction du texte saisi.
+        /// Si le champ de recherche est vide ou contient le placeholder, le filtre est réinitialisé.
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item><description>Le filtrage est réalisé par la méthode helper : <see cref="UIHelper.FiltrerBindingSource"/>.</description></item>
+        ///     </list>
+        /// </remarks>
         /// </summary>
         private void txtRecherche1_TextChanged(object sender, EventArgs e)
         {
-            if (txtRecherche1.Text != "Rechercher")
+            string texte = txtRecherche1.Text.Trim();
+
+            if (string.IsNullOrEmpty(texte) || texte == PlaceholderText)
             {
-                txtRecherche1.ForeColor = Color.Black;
-
-                // Appel au filtre via le contrôleur
-                List<Commande> resultat = controller.FiltrerCommandes(txtRecherche1.Text);
-                bindingSourceCommandes.DataSource = resultat;
-                dgvToutesCommandes.Refresh();
-
-                // Mise à jour du label avec le nombre de résultats
-                lblResultat.Text = $"{resultat.Count} commande(s) affichée(s)";
+                // Remet la liste complète si champ vide.
+                bindingSourceCommandes.DataSource = new SortableBindingList<Commande>(commandesOriginaux);
+            }
+            else
+            {
+                UIHelper.FiltrerBindingSource(bindingSourceCommandes, txtRecherche1, commandesOriginaux, "Id", ColTitre, ColSuivi);
+                AfficherNombreCommandes();
             }
         }
+
+        #endregion
 
 
         ///////////////////////////////////////////////////
         // Méthodes pour l'onglet 2 : commandes livres   //
         ///////////////////////////////////////////////////
 
+        #region Onglet 2 - Commandes de livre
 
         /// <summary>
-        /// Réinitialise la TextBox de recherche et recharge les données.
-        /// </summary>
+        /// Réinitialise la textBox de recherche et recharge la liste complète des livres.
+        /// </summary>.
         private void btnClear2_Click(object sender, EventArgs e)
         {
-            UIHelper.ClearTextBox(txtRecherche2, "Rechercher");
+            UIHelper.ClearTextBox(txtRecherche2, PlaceholderText);
             ChargerLivres();
         }
 
         /// <summary>
         /// Bouton "Commander" de l'onglet Livres.
-        /// Vérifie la sélection et les données saisies, puis crée une nouvelle commande.
+        /// Vérifie la sélection et les données saisies, puis créer une nouvelle commande.
         /// </summary>
         private void btnCommander1_Click(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(lblID.Text) || lblID.Text == "00000")
+            if (string.IsNullOrWhiteSpace(lblID.Text) || lblID.Text == IdBase)
             {
-                MessageBox.Show("Veuillez sélectionner un livre à commander.", "Alerte", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner un livre à commander.", MessageAlerte, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -418,44 +441,70 @@ namespace MediaTekDocuments.view
                 dateCommande: DateTime.Now,
                 montant: montant,
                 nbExemplaires: nbExemplaires,
-                suivi: "en cours"
+                suivi: StatutEnCours
             );
 
             bool success = controller.CreerCommandeLivre(nouvelleCommande);
 
             if (success)
             {
-                MessageBox.Show("Commande effectuée avec succès !", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Commande effectuée avec succès.", MessageSucces, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 txtMontant.Text = "";
                 nudNbExemplaires.Value = 1;
-                lblID.Text = "00000";
+                lblID.Text = IdBase;
             }
             else
             {
-                MessageBox.Show("Erreur lors de l'enregistrement de la commande.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Erreur lors de l'enregistrement de la commande.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         /// <summary>
-        /// Charge les livres dans le DataGridView de l'onglet Livres.
-        /// Configure également l'ordre et la visibilité de certaines colonnes.
+        /// Charge la liste complète des livres et configure le DataGridView pour affichage, tri et mise en forme.
+        /// Configure le ComboBox cbRevue.
         /// </summary>
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item>
+        ///             <description>Récupère les données via le contrôleur <see cref="FrmSuiviCommandesController"/>.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Utilise <see cref="SortableBindingList{T}"/> pour activer le tri sur chaque colonne.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Définit l’ordre et le texte des en-têtes de colonnes.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Masque les colonnes techniques (IDs et images) non pertinentes pour l’utilisateur.</description>
+        ///         </item>
+        ///     </list>
+        /// </remarks>
         private void ChargerLivres()
         {
-            List<Livre> livres = controller.GetAllLivres();
-            bindingSourceLivres.DataSource = new BindingList<Livre>(livres);
+            // Récupère la liste des livres via le contrôleur.
+            livresOriginaux = controller.GetAllLivres();
+
+            // Rendre triable le BindingSource au travers de la classe helper SortableBindingList.
+            var sortableLivres = new SortableBindingList<Livre>(livresOriginaux);
+            bindingSourceLivres.DataSource = sortableLivres;
             dgvCommandesLivre.DataSource = bindingSourceLivres;
 
+            // Assurer le tri automatique pour chaque colonne.
+            foreach (DataGridViewColumn col in dgvCommandesLivre.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.Automatic;
+            }
+
             dgvCommandesLivre.Columns["Id"].HeaderText = "ID";
-            dgvCommandesLivre.Columns["Titre"].HeaderText = "Titre";
+            dgvCommandesLivre.Columns[ColTitre].HeaderText = ColTitre;
             dgvCommandesLivre.Columns["Auteur"].HeaderText = "Auteur";
             dgvCommandesLivre.Columns["Isbn"].HeaderText = "ISBN";
-            dgvCommandesLivre.Columns["Genre"].HeaderText = "Genre";
-            dgvCommandesLivre.Columns["Public"].HeaderText = "Public";
-            dgvCommandesLivre.Columns["Rayon"].HeaderText = "Rayon";
+            dgvCommandesLivre.Columns[ColGenre].HeaderText = ColGenre;
+            dgvCommandesLivre.Columns[ColPublic].HeaderText = ColPublic;
+            dgvCommandesLivre.Columns[ColRayon].HeaderText = ColRayon;
 
             dgvCommandesLivre.Columns["Id"].DisplayIndex = 0;
-            dgvCommandesLivre.Columns["Titre"].DisplayIndex = 1;
+            dgvCommandesLivre.Columns[ColTitre].DisplayIndex = 1;
 
             dgvCommandesLivre.Columns["IdGenre"].Visible = false;
             dgvCommandesLivre.Columns["IdPublic"].Visible = false;
@@ -464,8 +513,11 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Lorsqu'une ligne du DataGridView des livres est cliquée,
-        /// récupère l'ID du livre et l'affiche dans le label dédié.
+        /// Lorsqu’un livre est cliqué dans le <see cref="dgvCommandesLivre"/> :  
+        /// <list type="bullet">
+        ///   <item><description>Récupère l’ID du livre dans la cellule <c>Id</c> de la ligne sélectionnée.</description></item>
+        ///   <item><description>Met à jour le <c>Label</c> <c>lblID</c> pour afficher cet ID.</description></item>
+        /// </list>
         /// </summary>
         private void dgvCommandesLivre_CellClick(object sender, DataGridViewCellEventArgs e)
         {
@@ -473,115 +525,61 @@ namespace MediaTekDocuments.view
                 return;
 
             DataGridViewRow ligne = dgvCommandesLivre.Rows[e.RowIndex];
-            string idLivre = ligne.Cells["Id"].Value.ToString();
+            var idLivre = ligne.Cells["Id"].Value.ToString();
             lblID.Text = idLivre;
         }
 
-        // Variables pour gérer le tri des livres.
-        private string currentSortColumnLivres = "";
-        private ListSortDirection currentSortDirectionLivres = ListSortDirection.Ascending;
-
         /// <summary>
-        /// Permet le tri dynamique des livres dans le DataGridView en cliquant sur l'en-tête.
+        /// Efface le placeholder "Rechercher" et modifie la couleur de la police pour permettre la saisie.
+        /// Utilise <see cref="UIHelper.GererEntreeTextBox"/>.
         /// </summary>
-        private void dgvCommandesLivre_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-        {
-            string columnName = dgvCommandesLivre.Columns[e.ColumnIndex].Name;
-
-            if (currentSortColumnLivres == columnName)
-            {
-                currentSortDirectionLivres = currentSortDirectionLivres == ListSortDirection.Ascending
-                    ? ListSortDirection.Descending
-                    : ListSortDirection.Ascending;
-            }
-            else
-            {
-                currentSortColumnLivres = columnName;
-                currentSortDirectionLivres = ListSortDirection.Ascending;
-            }
-
-            List<Livre> livres;
-            if (bindingSourceLivres.DataSource is BindingList<Livre> bindingList)
-            {
-                livres = bindingList.ToList();
-            }
-            else if (bindingSourceLivres.DataSource is List<Livre> list)
-            {
-                livres = list;
-            }
-            else
-            {
-                return;
-            }
-
-            if (currentSortDirectionLivres == ListSortDirection.Ascending)
-            {
-                livres = livres.OrderBy(l => GetPropertyValue(l, columnName)).ToList();
-            }
-            else
-            {
-                livres = livres.OrderByDescending(l => GetPropertyValue(l, columnName)).ToList();
-            }
-
-            bindingSourceLivres.DataSource = new BindingList<Livre>(livres);
-            dgvCommandesLivre.Refresh();
-
-            foreach (DataGridViewColumn col in dgvCommandesLivre.Columns)
-            {
-                col.HeaderCell.SortGlyphDirection = SortOrder.None;
-            }
-            dgvCommandesLivre.Columns[columnName].HeaderCell.SortGlyphDirection = currentSortDirectionLivres == ListSortDirection.Ascending
-                ? SortOrder.Ascending
-                : SortOrder.Descending;
-        }
+        private void txtRecherche2_Enter(object sender, EventArgs e) => UIHelper.GererEntreeTextBox(txtRecherche2, PlaceholderText);
 
         /// <summary>
-        /// Efface le placeholder et modifie la couleur de la police.
+        /// Restaure le placeholder "Rechercher" si le textBox est vide et ajuste la couleur.
+        /// Utilise <see cref="UIHelper.GererSortieTextBox"/>.
         /// </summary>
-        private void txtRecherche2_Enter(object sender, EventArgs e)
-        {
-            UIHelper.GererEntreeTextBox(txtRecherche2, "Rechercher");
-        }
+        private void txtRecherche2_Leave(object sender, EventArgs e) => UIHelper.GererSortieTextBox(txtRecherche2, PlaceholderText);
 
         /// <summary>
-        /// Réaffiche le placeholder si le champ est vide.
-        /// </summary>
-        private void txtRecherche2_Leave(object sender, EventArgs e)
-        {
-            UIHelper.GererSortieTextBox(txtRecherche2, "Rechercher");
-        }
-
-        /// <summary>
-        /// Gestion de la recherche dynamique dans la TextBox de l'onglet Livres.
-        /// Filtre la liste des livres via ID.
+        /// Filtre dynamiquement la liste des livres affichés dans le DataGridView
+        /// en fonction du texte saisi.
+        /// Si le champ de recherche est vide ou contient le placeholder, le filtre est réinitialisé.
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item><description>Le filtrage est réalisé par la méthode helper : <see cref="UIHelper.FiltrerBindingSource"/>.</description></item>
+        ///     </list>
+        /// </remarks>
         /// </summary>
         private void txtRecherche2_TextChanged(object sender, EventArgs e)
         {
-            if (txtRecherche2.Text != "Rechercher")
+            string texte = txtRecherche2.Text.Trim();
+
+            if (string.IsNullOrEmpty(texte) || texte == PlaceholderText)
             {
-                txtRecherche2.ForeColor = Color.Black;
-                string motCle = txtRecherche2.Text.ToLower();
-
-                List<Livre> livres = controller.GetAllLivres();
-                var resultats = livres.Where(l => l.Id.ToLower().Contains(motCle)).ToList();
-
-                bindingSourceLivres.DataSource = new BindingList<Livre>(resultats);
-                dgvCommandesLivre.Refresh();
+                // Remet la liste complète si champ vide.
+                bindingSourceLivres.DataSource = new SortableBindingList<Livre>(livresOriginaux);
+            }
+            else
+            {
+                UIHelper.FiltrerBindingSource(bindingSourceLivres, txtRecherche2, livresOriginaux, "Id", ColTitre, "Auteur", ColGenre, ColPublic);
             }
         }
 
+        #endregion
 
         ///////////////////////////////////////////////////
         // Méthodes pour l'onglet 3 : commandes DVD      //
         ///////////////////////////////////////////////////
 
+        #region Onglet 3 - Commande de DVD
 
         /// <summary>
-        /// Réinitialise la TextBox de recherche et recharge les données.
-        /// </summary>
+        /// Réinitialise la textBox de recherche et recharge la liste complète des DVD.
+        /// </summary>.
         private void btnClear3_Click(object sender, EventArgs e)
         {
-            UIHelper.ClearTextBox(txtRecherche3, "Rechercher");
+            UIHelper.ClearTextBox(txtRecherche3, PlaceholderText);
             ChargerDVD();
         }
 
@@ -591,9 +589,9 @@ namespace MediaTekDocuments.view
         /// </summary>
         private void btnCommanderDVD_Click(object sender, EventArgs e)
         {
-            if (string.IsNullOrWhiteSpace(lblID_DVD.Text) || lblID_DVD.Text == "00000")
+            if (string.IsNullOrWhiteSpace(lblID_DVD.Text) || lblID_DVD.Text == IdBase)
             {
-                MessageBox.Show("Veuillez sélectionner un DVD à commander.", "Alerte", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner un DVD à commander.", MessageAlerte, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -614,51 +612,77 @@ namespace MediaTekDocuments.view
             if (confirmation != DialogResult.Yes)
                 return;
 
-            Commande nouvelleCommande = new Commande(
+            Commande nouvelleCommande = new(
                 id: "",
                 titre: "",
                 idLivreDvd: lblID_DVD.Text,
                 dateCommande: DateTime.Now,
                 montant: montant,
                 nbExemplaires: nbExemplaires,
-                suivi: "en cours"
+                suivi: StatutEnCours
             );
 
             bool success = controller.CreerNouvelleCommande(nouvelleCommande);
 
             if (success)
             {
-                MessageBox.Show("Commande de DVD effectuée avec succès !", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Commande de DVD effectuée avec succès.", MessageSucces, MessageBoxButtons.OK, MessageBoxIcon.Information);
                 txtMontantDVD.Text = "";
                 nudNbExemplairesDVD.Value = 1;
-                lblID_DVD.Text = "00000";
+                lblID_DVD.Text = IdBase;
             }
             else
             {
-                MessageBox.Show("Erreur lors de l'enregistrement de la commande.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Erreur lors de l'enregistrement de la commande.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         /// <summary>
-        /// Charge les DVD dans le DataGridView de l'onglet DVD.
-        /// Configure l'affichage des colonnes et masque celles inutiles.
+        /// Charge la liste complète des DVD et configure le DataGridView pour affichage, tri et mise en forme.
+        /// Configure le ComboBox cbRevue.
         /// </summary>
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item>
+        ///             <description>Récupère les données via le contrôleur <see cref="FrmSuiviCommandesController"/>.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Utilise <see cref="SortableBindingList{T}"/> pour activer le tri sur chaque colonne.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Définit l’ordre et le texte des en-têtes de colonnes.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Masque les colonnes techniques (IDs, images et synopsis) non pertinentes pour l’utilisateur.</description>
+        ///         </item> 
+        ///     </list>
+        /// </remarks>
         private void ChargerDVD()
         {
-            List<Dvd> dvds = controller.GetAllDvd();
-            bindingSourceDVD.DataSource = new BindingList<Dvd>(dvds);
+            // Récupère la liste des livres via le contrôleur.
+            dvdOriginaux = controller.GetAllDvd();
+
+            // Rendre triable le BindingSource au travers de la classe helper SortableBindingList. Et l'assigner au DGV.
+            var sortableDVD = new SortableBindingList<Dvd>(dvdOriginaux);
+            bindingSourceDVD.DataSource = sortableDVD;
             dgvCommandesDVD.DataSource = bindingSourceDVD;
 
+            // Assurer le tri automatique pour chaque colonne.
+            foreach (DataGridViewColumn col in dgvCommandesDVD.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.Automatic;
+            }
+
             dgvCommandesDVD.Columns["Id"].HeaderText = "ID";
-            dgvCommandesDVD.Columns["Titre"].HeaderText = "Titre";
+            dgvCommandesDVD.Columns[ColTitre].HeaderText = ColTitre;
             dgvCommandesDVD.Columns["Realisateur"].HeaderText = "Réalisateur";
             dgvCommandesDVD.Columns["Duree"].HeaderText = "Durée (min)";
-            dgvCommandesDVD.Columns["Genre"].HeaderText = "Genre";
-            dgvCommandesDVD.Columns["Public"].HeaderText = "Public";
-            dgvCommandesDVD.Columns["Rayon"].HeaderText = "Rayon";
+            dgvCommandesDVD.Columns[ColGenre].HeaderText = ColGenre;
+            dgvCommandesDVD.Columns[ColPublic].HeaderText = ColPublic;
+            dgvCommandesDVD.Columns[ColRayon].HeaderText = ColRayon;
 
             dgvCommandesDVD.Columns["Id"].DisplayIndex = 0;
-            dgvCommandesDVD.Columns["Titre"].DisplayIndex = 1;
+            dgvCommandesDVD.Columns[ColTitre].DisplayIndex = 1;
 
             dgvCommandesDVD.Columns["IdGenre"].Visible = false;
             dgvCommandesDVD.Columns["IdPublic"].Visible = false;
@@ -668,8 +692,11 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Lorsqu'une ligne du DataGridView des DVD est cliquée,
-        /// récupère l'ID du DVD et l'affiche dans le label dédié.
+        /// Lorsqu’un DVD est cliqué dans le <see cref="dgvCommandesDVD"/> :  
+        /// <list type="bullet">
+        ///   <item><description>Récupère l’ID du DVD dans la cellule <c>Id</c> de la ligne sélectionnée.</description></item>
+        ///   <item><description>Met à jour le <c>Label</c> <c>lblID_DVD</c> pour afficher cet ID.</description></item>
+        /// </list>
         /// </summary>
         private void dgvCommandesDVD_CellClick(object sender, DataGridViewCellEventArgs e)
         {
@@ -677,82 +704,47 @@ namespace MediaTekDocuments.view
                 return;
 
             DataGridViewRow ligne = dgvCommandesDVD.Rows[e.RowIndex];
-            string idDVD = ligne.Cells["Id"].Value.ToString();
+            var idDVD = ligne.Cells["Id"].Value.ToString();
             lblID_DVD.Text = idDVD;
         }
 
-        // Variables pour gérer le tri des DVD
-        private string currentSortColumnDVD = "";
-        private ListSortDirection currentSortDirectionDVD = ListSortDirection.Ascending;
-
         /// <summary>
-        /// Permet le tri dynamique des DVD dans le DataGridView en cliquant sur l'en-tête.
-        /// Alterne entre tri croissant et décroissant.
+        /// Efface le placeholder "Rechercher" et modifie la couleur de la police pour permettre la saisie.
+        /// Utilise <see cref="UIHelper.GererEntreeTextBox"/>.
         /// </summary>
-        private void dgvCommandesDVD_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-        {
-            string columnName = dgvCommandesDVD.Columns[e.ColumnIndex].Name;
-
-            if (currentSortColumnDVD == columnName)
-            {
-                currentSortDirectionDVD = currentSortDirectionDVD == ListSortDirection.Ascending
-                    ? ListSortDirection.Descending
-                    : ListSortDirection.Ascending;
-            }
-            else
-            {
-                currentSortColumnDVD = columnName;
-                currentSortDirectionDVD = ListSortDirection.Ascending;
-            }
-
-            List<Dvd> dvds = (bindingSourceDVD.DataSource as BindingList<Dvd>).ToList();
-
-            if (currentSortDirectionDVD == ListSortDirection.Ascending)
-            {
-                dvds = dvds.OrderBy(d => GetPropertyValue(d, columnName)).ToList();
-            }
-            else
-            {
-                dvds = dvds.OrderByDescending(d => GetPropertyValue(d, columnName)).ToList();
-            }
-
-            bindingSourceDVD.DataSource = new BindingList<Dvd>(dvds);
-            dgvCommandesDVD.Refresh();
-        }
+        private void txtRecherche3_Enter(object sender, EventArgs e) => UIHelper.GererEntreeTextBox(txtRecherche3, PlaceholderText);
 
         /// <summary>
-        /// Efface le placeholder et modifie la couleur de la police.
+        /// Restaure le placeholder "Rechercher" si le textBox est vide et ajuste la couleur.
+        /// Utilise <see cref="UIHelper.GererSortieTextBox"/>.
         /// </summary>
-        private void txtRecherche3_Enter(object sender, EventArgs e)
-        {
-            UIHelper.GererEntreeTextBox(txtRecherche3, "Rechercher");
-        }
+        private void txtRecherche3_Leave(object sender, EventArgs e) => UIHelper.GererSortieTextBox(txtRecherche3, PlaceholderText);
 
         /// <summary>
-        /// Réaffiche le placeholder si le champ est vide.
-        /// </summary>
-        private void txtRecherche3_Leave(object sender, EventArgs e)
-        {
-            UIHelper.GererSortieTextBox(txtRecherche3, "Rechercher");
-        }
-
-        /// <summary>
-        /// Gestion de la recherche dynamique dans la TextBox de l'onglet DVD.
-        /// Filtre la liste des DVD en fonction de son ID.
+        /// Filtre dynamiquement la liste des DVD affichés dans le DataGridView
+        /// en fonction du texte saisi.
+        /// Si le champ de recherche est vide ou contient le placeholder, le filtre est réinitialisé.
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item><description>Le filtrage est réalisé par la méthode helper : <see cref="UIHelper.FiltrerBindingSource"/>.</description></item>
+        ///     </list>
+        /// </remarks>
         /// </summary>
         private void txtRecherche3_TextChanged(object sender, EventArgs e)
         {
-            if (txtRecherche3.Text != "Rechercher")
+            string texte = txtRecherche3.Text.Trim();
+
+            if (string.IsNullOrEmpty(texte) || texte == PlaceholderText)
             {
-                txtRecherche3.ForeColor = Color.Black;
-                string motCle = txtRecherche3.Text.ToLower();
-
-                List<Dvd> dvds = controller.GetAllDvd();
-                var resultats = dvds.Where(d => d.Id.ToLower().Contains(motCle)).ToList();
-
-                bindingSourceDVD.DataSource = new BindingList<Dvd>(resultats);
-                dgvCommandesDVD.Refresh();
+                // Remet la liste complète si champ vide. Si l'utilisateur sélectinne la ligne entière et la supprime.
+                bindingSourceDVD.DataSource = new SortableBindingList<Dvd>(dvdOriginaux);
+            }
+            else
+            {
+                UIHelper.FiltrerBindingSource(bindingSourceDVD, txtRecherche3, dvdOriginaux, "Id", ColTitre, "Realisateur", ColGenre, ColPublic);
             }
         }
+
+        #endregion
     }
 }

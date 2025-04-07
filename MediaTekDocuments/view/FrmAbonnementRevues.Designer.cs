@@ -226,6 +226,7 @@
             dgvAbonnements.Size = new Size(1235, 538);
             dgvAbonnements.TabIndex = 2;
             dgvAbonnements.CellClick += dgvAbonnements_CellClick;
+            dgvAbonnements.RowPrePaint += dgvAbonnements_RowPrePaint;
             // 
             // tabAbonnements
             // 

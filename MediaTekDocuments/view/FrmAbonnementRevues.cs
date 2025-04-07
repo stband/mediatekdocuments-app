@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Drawing;
-using System.Windows.Forms;
-using MediaTekDocuments.dal;
 using MediaTekDocuments.model;
 using MediaTekDocuments.helper;
 using MediaTekDocuments.controller;
@@ -11,80 +8,109 @@ namespace MediaTekDocuments.view
 {
     public partial class FrmAbonnementRevues : Form
     {
-        private readonly FrmAbonnementRevuesController controller;
+        #region constantes de la classe
 
+        private const string PlaceholderText = "Rechercher";
+        private const string MessageSucces = "Succès";
+        private const string MessageErreur = "Erreur";
+        private const string MessageInformation = "Information";
+
+        private const string ColIdAbonnement = "IdAbonnement";
+        private const string ColTitreRevue = "TitreRevue";
+        private const string ColDateFinAbonnement = "DateFinAbonnement";
+        private const string ColIdRevue = "IdRevue";
+        private const string ColTitre = "Titre";
+        private const string ColGenre = "Genre";
+
+
+        #endregion
+
+        #region bindingsource et données locales
+
+        // BindingSource pour centraliser la liaison des données pour chaque onglet.
+        private readonly BindingSource bindingSourceAbonnements = [];
+        private readonly BindingSource bindingSourceRevues = [];
+
+        // Copie en mémoire pour reset les listes originales après un trie ou un filtre.
+        private List<Abonnement> abonnementsOriginaux = [];
+        private List<Revue> revuesOriginaux = [];
+
+        // Contrôleur du formulaire unique
+        private readonly FrmAbonnementRevuesController controller = new();
+
+        #endregion
+
+        /// <summary>
+        /// Constructeur : initialise les composants du formulaire.
+        /// </summary>
         public FrmAbonnementRevues()
         {
             InitializeComponent();
-            controller = new FrmAbonnementRevuesController();
         }
 
         /// <summary>
-        /// Gestionnaire de l'événement Load du formulaire.
-        /// Charge les abonnements lors de l'initialisation.
+        /// Événement initial du chargement de la fenêtre.
+        /// Lance <see cref="ChargerAbonnements"/> pour afficher les abonnements.
         /// </summary>
-        private void FrmAbonnementRevues_Load(object sender, EventArgs e)
-        {
-            LoadAbonnements();
-        }
+        private void FrmAbonnementRevues_Load(object? sender, EventArgs e) => ChargerAbonnements();
 
 
         ///////////////////////////////////////////////////
         //             Méthodes générales                //
         ///////////////////////////////////////////////////
 
+        #region Gestion des onglets
 
         /// <summary>
-        /// Gère le changement d'onglet dans le TabControl.
-        /// Recharge les données correspondantes en fonction de l'onglet sélectionné :
-        /// - Onglet 0 : Chargement des abonnements.
-        /// - Onglet 1 : Chargement des revues.
+        /// Gère le changement d’onglet :  
+        /// <list type="bullet">
+        ///   <item><description>Onglet 1 : charge tous les abonnements.</description></item>
+        ///   <item><description>Onglet 2 : charge les revues.</description></item>
+        /// </list>
         /// </summary>
-        private void tabAbonnements_SelectedIndexChanged(object sender, EventArgs e)
+        private void tabAbonnements_SelectedIndexChanged(object? sender, EventArgs e)
         {
             switch (tabAbonnements.SelectedIndex)
             {
                 case 0: // Onglet 1 : Gestion des abonnements.
-                    LoadAbonnements();
+                    ChargerAbonnements();
                     break;
-
                 case 1: // Onglet 2 : Gestion des revues.
-                    LoadRevues();
+                    ChargerRevues();
                     break;
             }
         }
 
+        #endregion
 
         //////////////////////////////////////////////////////////
         //  Méthodes pour l'onglet 1 : Gestion des abonnements  //
         //////////////////////////////////////////////////////////
 
+        #region Onglet 1 — Gestion des abonnements
 
         /// <summary>
-        /// Liste complète des abonnements sans filtre.
-        /// Sert à réinitialiser le filtrage dans le DataGridView.
+        /// Vide le champ de recherche et recharge l'ensemble des abonnements.
+        /// Utilise <see cref="UIHelper.ClearTextBox"/> pour réinitialiser le placeholder.
         /// </summary>
-        private List<Abonnement> abonnementsOriginaux;
-
-        /// <summary>
-        /// Réinitialise le TextBox de recherche en remettant le placeholder "Rechercher"
-        /// et recharge la liste des abonnements.
-        /// </summary>
-        /// <param name="sender">Bouton "Effacer" (btnClearRecherche).</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void btnClearRecherche_Click(object sender, EventArgs e)
+        private void btnClearRecherche_Click(object? sender, EventArgs e)
         {
-            UIHelper.ClearTextBox(txtRecherche, "Rechercher");
-            LoadAbonnements();
+            UIHelper.ClearTextBox(txtRecherche, PlaceholderText);
+            ChargerAbonnements();
         }
 
         /// <summary>
-        /// Gère le clic sur une cellule du DataGridView des abonnements.
-        /// Met à jour les contrôles graphiques (DateTimePickers et label) pour préparer le renouvellement.
+        /// Dès qu’on clique sur une ligne du <see cref="dgvAbonnements"/>, on :  
+        /// <list type="bullet">
+        ///   <item><description>Récupère l’abonnement sélectionné.</description></item>
+        ///   <item><description>Mécanisme anti-chevauchement lors du renouvellement : prépare les DateTimePicker pour un renouvellement automatique : 
+        ///   la date de début de renouvellement est mise en place un jour après la date de fin de l'abonnement. La date de fin de renouvellement est
+        ///   mise en place un an après la date de début de renouvellement.
+        ///   </description></item>
+        ///   <item><description>Met à jour le label pour afficher le numéro de commande de la revue.</description></item>
+        /// </list>
         /// </summary>
-        /// <param name="sender">Le DataGridView (dgvAbonnements).</param>
-        /// <param name="e">Données associées (incluant l'indice de la ligne).</param>
-        private void dgvAbonnements_CellClick(object sender, DataGridViewCellEventArgs e)
+        private void dgvAbonnements_CellClick(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex >= 0)
             {
@@ -103,19 +129,32 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Charge les abonnements depuis la base de données et configure le DataGridView pour
-        /// afficher et trier les abonnements.
-        /// La méthode utilise une SortableBindingList pour permettre un tri automatique.
+        /// Charge la liste complète des abonnements et configure le DataGridView pour affichage, tri et mise en forme.
         /// </summary>
-        private void LoadAbonnements()
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item>
+        ///             <description>Récupère les données via le contrôleur <see cref="FrmAbonnementRevuesController"/>.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Utilise <see cref="SortableBindingList{T}"/> pour activer le tri sur chaque colonne.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Définit l’ordre et le texte des en-têtes de colonnes.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Masque la colonne technique (ID) non pertinente pour l’utilisateur.</description>
+        ///         </item>
+        ///     </list>
+        /// </remarks>
+        private void ChargerAbonnements()
         {
             abonnementsOriginaux = controller.GetAllAbonnements();
 
-            // Créer le BindingSource et le rendre triable au travers de la classe helper SortableBindingList.
+            // Rendre triable le BindingSourcee au travers de la classe helper SortableBindingList.
             var sortableAbonnements = new SortableBindingList<Abonnement>(abonnementsOriginaux);
-            BindingSource bs = new BindingSource();
-            bs.DataSource = sortableAbonnements;
-            dgvAbonnements.DataSource = bs;
+            bindingSourceAbonnements.DataSource = sortableAbonnements;
+            dgvAbonnements.DataSource = bindingSourceAbonnements;
 
             // Assurer le tri automatique pour chaque colonne.
             foreach (DataGridViewColumn col in dgvAbonnements.Columns)
@@ -123,29 +162,32 @@ namespace MediaTekDocuments.view
                 col.SortMode = DataGridViewColumnSortMode.Automatic;
             }
 
-            // Configuration des colonnes et de l'ordre d'affichage.
-            dgvAbonnements.Columns["IdAbonnement"].HeaderText = "N° commande";
-            dgvAbonnements.Columns["TitreRevue"].HeaderText = "Titre";
-            dgvAbonnements.Columns["DateCommande"].HeaderText = "Date de souscription";
-            dgvAbonnements.Columns["DateFinAbonnement"].HeaderText = "Date de fin";
+            dgvAbonnements.Columns[ColIdAbonnement].HeaderText = "N° commande";
+            dgvAbonnements.Columns[ColTitreRevue].HeaderText = "Titre";
+            dgvAbonnements.Columns["DateCommande"].HeaderText = "Date de début";
+            dgvAbonnements.Columns[ColDateFinAbonnement].HeaderText = "Date de fin";
             dgvAbonnements.Columns["Montant"].HeaderText = "Montant (€)";
 
-            dgvAbonnements.Columns["IdAbonnement"].DisplayIndex = 0;
-            dgvAbonnements.Columns["TitreRevue"].DisplayIndex = 1;
+            dgvAbonnements.Columns[ColIdAbonnement].DisplayIndex = 0;
+            dgvAbonnements.Columns[ColTitreRevue].DisplayIndex = 1;
 
-            dgvAbonnements.Columns["IdRevue"].Visible = false;
+            dgvAbonnements.Columns[ColIdRevue].Visible = false;
+        }
 
-            // Colorer les lignes dont la date de fin est passée (abonnements expirés).
-            foreach (DataGridViewRow row in dgvAbonnements.Rows)
+        /// <summary>
+        /// Applique une couleur de fond aux lignes du DataGridView selon l'état de l'abonnement (actif ou expiré).
+        /// Utilisé pour améliorer la lisibilité.
+        /// </summary>
+        private void dgvAbonnements_RowPrePaint(object sender, DataGridViewRowPrePaintEventArgs e)
+        {
+            var ligne = dgvAbonnements.Rows[e.RowIndex];
+            var abonnement = (Abonnement)ligne.DataBoundItem;
+
+            if (abonnement == null) return;
+
+            if (abonnement.DateFinAbonnement < DateTime.Now)
             {
-                if (row.Cells["DateFinAbonnement"].Value != null)
-                {
-                    DateTime dateFin = Convert.ToDateTime(row.Cells["DateFinAbonnement"].Value);
-                    if (dateFin < DateTime.Now)
-                    {
-                        row.DefaultCellStyle.BackColor = Color.LightGray;
-                    }
-                }
+                ligne.DefaultCellStyle.BackColor = Color.LightGray;
             }
         }
 
@@ -153,164 +195,162 @@ namespace MediaTekDocuments.view
         /// Gère le clic sur le bouton "Renouveler", permettant de renouveler l'abonnement sélectionné.
         /// Vérifie si un abonnement actif existe déjà pour la revue et crée un nouvel abonnement via le contrôleur.
         /// </summary>
-        /// <param name="sender">Bouton "Renouveler" (btnRenouvelerAbonnement).</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void btnRenouvelerAbonnement_Click(object sender, EventArgs e)
+        private void btnRenouvelerAbonnement_Click(object? sender, EventArgs e)
         {
-            if (dgvAbonnements.SelectedRows.Count > 0)
+            if (dgvAbonnements.SelectedRows.Count == 0)
             {
-                // Récupérer l'abonnement sélectionné.
-                DataGridViewRow row = dgvAbonnements.SelectedRows[0];
-                string idRevue = row.Cells["IdRevue"].Value.ToString();
-                string titreRevue = row.Cells["TitreRevue"].Value.ToString();
-                string idAbonnement = row.Cells["IdAbonnement"].Value.ToString();
-                double montant = Convert.ToDouble(row.Cells["Montant"].Value);
-                DateTime dateFinPrecedent = Convert.ToDateTime(row.Cells["DateFinAbonnement"].Value);
-
-                // Vérification : empêche le renouvellement si un abonnement actif existe déjà.
-                if (controller.AbonnementActifExiste(idRevue, dtpDateDebutRenouvellement.Value, dtpDateFinRenouvellement.Value))
-                {
-                    MessageBox.Show("Impossible de renouveler : un abonnement actif existe déjà pour cette revue. Vous devez choisir une date de début et de fin qui ne rentre pas en colision avec l'abonnement toujours en cours.", "Abonnement actif", MessageBoxButtons.OK, MessageBoxIcon.Warning);
-                    return;
-                }
-
-
-                // Construction du nouvel abonnement.
-                Abonnement nouveauAbo = new Abonnement
-                {
-                    IdRevue = idRevue,
-                    TitreRevue = titreRevue,
-                    DateCommande = dtpDateDebutRenouvellement.Value,
-                    DateFinAbonnement = dtpDateFinRenouvellement.Value,
-                    Montant = montant
-                };
-
-                bool result = controller.CreerAbonnement(nouveauAbo);
-                if (result)
-                {
-                    MessageBox.Show("Abonnement renouvelé avec succès.", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                    LoadAbonnements();
-                }
-                else
-                {
-                    MessageBox.Show("Erreur lors du renouvellement de l'abonnement.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
-                }
+                MessageBox.Show(
+                    "Veuillez sélectionner un abonnement dans la liste pour le renouveler.",
+                    MessageInformation,
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
+                return;
             }
-            else
+
+            // Récupérer l'abonnement sélectionné.
+            var abonnement = (Abonnement)dgvAbonnements.SelectedRows[0].DataBoundItem;
+
+            // Vérification : empêche le renouvellement si un abonnement actif existe dans la période choisie.
+            if (controller.AbonnementActifExiste(abonnement.IdRevue, dtpDateDebutRenouvellement.Value, dtpDateFinRenouvellement.Value))
             {
-                MessageBox.Show("Veuillez sélectionner un abonnement dans la liste pour le renouveler.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Un abonnement actif existe déjà pour cette revue. Vous devez choisir une date de début et de fin qui ne rentre pas en colision avec l'abonnement toujours en cours.",
+                    "Renouvellement impossible",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+                return;
+            }
+
+            // Construction du nouvel abonnement.
+            Abonnement nouveauAbo = new()
+            {
+                IdRevue = abonnement.IdRevue,
+                TitreRevue = abonnement.TitreRevue,
+                DateCommande = dtpDateDebutRenouvellement.Value,
+                DateFinAbonnement = dtpDateFinRenouvellement.Value,
+                Montant = abonnement.Montant
+            };
+
+            var message = $"""
+                Êtes-vous sûr de vouloir renouveler l'abonnement n°{abonnement.IdAbonnement} ?
+                Du {nouveauAbo.DateCommande:dd/MM/yyyy} au {nouveauAbo.DateFinAbonnement:dd/MM/yyyy} ?
+            """;
+
+            DialogResult confirm = MessageBox.Show(
+                message,
+                "Confirmation de suppression",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question
+            );
+
+            if (confirm != DialogResult.Yes)
+                return;
+
+            bool result = controller.CreerAbonnement(nouveauAbo);
+                
+            if (result)
+            {
+                MessageBox.Show("Abonnement renouvelé avec succès.", MessageSucces, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                ChargerAbonnements();
+            } else
+            {
+                MessageBox.Show("Erreur lors du renouvellement de l'abonnement.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
         /// <summary>
-        /// Gère le clic sur le bouton "Supprimer" afin de supprimer l'abonnement sélectionné après confirmation.
+        /// Supprime l'abonnement sélectionné après confirmation.
+        /// La suppression est gérée par : <see cref="FrmAbonnementRevuesController.SupprimerAbonnement"/>.
         /// </summary>
-        /// <param name="sender">Bouton "Supprimer" (btnSupprimerAbonnement).</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void btnSupprimerAbonnement_Click(object sender, EventArgs e)
+        private void btnSupprimerAbonnement_Click(object? sender, EventArgs e)
         {
             if (dgvAbonnements.SelectedRows.Count > 0)
             {
                 DataGridViewRow row = dgvAbonnements.SelectedRows[0];
-                string idAbonnement = row.Cells["IdAbonnement"].Value.ToString();
+                string idAbonnement = row.Cells[ColIdAbonnement].Value?.ToString() ?? string.Empty;
 
-                DialogResult confirmation = MessageBox.Show("Voulez-vous vraiment supprimer cet abonnement ?", "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                DialogResult confirmation = MessageBox.Show($"Voulez-vous vraiment supprimer l'abonnement n°{idAbonnement} ?", "Confirmation", MessageBoxButtons.YesNo, MessageBoxIcon.Warning);
+                
                 if (confirmation == DialogResult.Yes)
                 {
                     bool result = controller.SupprimerAbonnement(idAbonnement);
+                    
                     if (result)
                     {
-                        MessageBox.Show("Abonnement supprimé avec succès.", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                        LoadAbonnements();
+                        MessageBox.Show("Abonnement supprimé avec succès.", MessageSucces, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        ChargerAbonnements();
                     }
                     else
                     {
-                        MessageBox.Show("Suppression impossible : cet abonnement est lié à des exemplaires.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                        MessageBox.Show("Suppression impossible : cet abonnement est lié à des exemplaires.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
                     }
                 }
             }
             else
             {
-                MessageBox.Show("Veuillez sélectionner un abonnement dans la liste pour le supprimer.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                MessageBox.Show("Veuillez sélectionner un abonnement dans la liste pour le supprimer.", MessageInformation, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
         /// <summary>
-        /// Gère l'événement Enter du TextBox txtRecherche.
         /// Efface le placeholder "Rechercher" et modifie la couleur de la police pour permettre la saisie.
+        /// Utilise <see cref="UIHelper.GererEntreeTextBox"/>.
         /// </summary>
-        /// <param name="sender">Le TextBox txtRecherche.</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void txtRecherche_Enter(object sender, EventArgs e)
-        {
-            UIHelper.GererEntreeTextBox(txtRecherche, "Rechercher");
-        }
+        private void txtRecherche_Enter(object? sender, EventArgs e) => UIHelper.GererEntreeTextBox(txtRecherche, PlaceholderText);
 
         /// <summary>
-        /// Gère l'événement Leave du TextBox txtRecherche.
-        /// Restaure le placeholder "Rechercher" si le TextBox est vide et ajuste la couleur.
+        /// Restaure le placeholder "Rechercher" si le textBox est vide et ajuste la couleur.
+        /// Utilise <see cref="UIHelper.GererSortieTextBox"/>.
         /// </summary>
-        /// <param name="sender">Le TextBox txtRecherche.</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void txtRecherche_Leave(object sender, EventArgs e)
-        {
-            UIHelper.GererSortieTextBox(txtRecherche, "Rechercher");
-        }
+        private void txtRecherche_Leave(object? sender, EventArgs e) => UIHelper.GererSortieTextBox(txtRecherche, PlaceholderText);
 
         /// <summary>
-        /// Filtre dynamiquement la liste des abonnements affichée dans le DataGridView
-        /// en fonction du texte saisi dans txtRecherche.
+        /// Filtre dynamiquement la liste des abonnements affichés dans le DataGridView
+        /// en fonction du texte saisi.
         /// Si le champ de recherche est vide ou contient le placeholder, le filtre est réinitialisé.
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item><description>Le filtrage est réalisé par la méthode helper : <see cref="UIHelper.FiltrerBindingSource"/>.</description></item>
+        ///     </list>
+        /// </remarks>
         /// </summary>
-        /// <param name="sender">Le TextBox txtRecherche.</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void txtRecherche_TextChanged(object sender, EventArgs e)
+        private void txtRecherche_TextChanged(object? sender, EventArgs e)
         {
-            if (dgvAbonnements.DataSource is BindingSource bs)
-            {
-                string texte = txtRecherche.Text.Trim();
+            string texte = txtRecherche.Text.Trim();
 
-                if (string.IsNullOrEmpty(texte) || texte == "Rechercher")
-                {
-                    // Remet la liste complète si champ vide.
-                    bs.DataSource = new SortableBindingList<Abonnement>(abonnementsOriginaux);
-                }
-                else
-                {
-                    UIHelper.FiltrerBindingSource<Abonnement>(bs, txtRecherche, abonnementsOriginaux, "IdAbonnement", "TitreRevue");
-                }
+            if (string.IsNullOrEmpty(texte) || texte == PlaceholderText)
+            {
+                // Remet la liste complète si champ vide.
+                bindingSourceAbonnements.DataSource = new SortableBindingList<Abonnement>(abonnementsOriginaux);
+            }
+            else
+            {
+                UIHelper.FiltrerBindingSource(bindingSourceAbonnements, txtRecherche, abonnementsOriginaux, ColIdAbonnement, ColTitreRevue, "Montant");
             }
         }
 
+        #endregion
 
         //////////////////////////////////////////////////////////
         //    Méthodes pour l'onglet 2 : Gestion des revues     //
         //////////////////////////////////////////////////////////
 
-
-        // Stocke la liste complète des revues, utilisée pour réinitialiser le filtrage.
-        private List<Revue> revuesOriginaux;
+        #region Onglet 2 - Gestion des revues
 
         /// <summary>
-        /// Réinitialise le TextBox de recherche pour les revues (txtRechercheRevues)
-        /// en lui assignant le placeholder "Rechercher" et recharge la liste complète des revues.
-        /// </summary>
-        /// <param name="sender">Bouton "Effacer" (btnClearRecherche2).</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void btnClearRecherche2_Click(object sender, EventArgs e)
+        /// Réinitialise la textBox de recherche et recharge la liste complète des revues.
+        /// </summary>.
+        private void btnClearRecherche2_Click(object? sender, EventArgs e)
         {
-            UIHelper.ClearTextBox(txtRechercheRevues, "Rechercher");
-            LoadRevues();
+            UIHelper.ClearTextBox(txtRechercheRevues, PlaceholderText);
+            ChargerRevues();
         }
-
 
         /// <summary>
         /// Gère le clic sur une cellule du DataGridView des revues (dgvRevues).
-        /// Met à jour le ComboBox (cbRevue) avec la revue sélectionnée afin de faciliter la souscription.
+        /// Met à jour <see cref="cbRevue"/> avec la revue sélectionnée afin de faciliter la souscription à un abonnement.
         /// </summary>
-        /// <param name="sender">Le DataGridView dgvRevues.</param>
-        /// <param name="e">Données de l'événement, incluant l'indice de la ligne.</param>
-        private void dgvRevues_CellClick(object sender, DataGridViewCellEventArgs e)
+        private void dgvRevues_CellClick(object? sender, DataGridViewCellEventArgs e)
         {
             if (e.RowIndex >= 0)
             {
@@ -323,18 +363,36 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Charge les revues depuis la base de données et configure le DataGridView dgvRevues
-        /// pour afficher et trier la liste des revues.
-        /// Met aussi à jour le ComboBox cbRevue avec la liste complète des revues.
+        /// Charge la liste complète des revues et configure le DataGridView pour affichage, tri et mise en forme.
+        /// Configure le ComboBox cbRevue.
         /// </summary>
-        private void LoadRevues()
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item>
+        ///             <description>Récupère les données via le contrôleur <see cref="FrmAbonnementRevuesController"/>.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Utilise <see cref="SortableBindingList{T}"/> pour activer le tri sur chaque colonne.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Définit l’ordre et le texte des en-têtes de colonnes.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Masque les colonnes techniques (IDs et images) non pertinentes pour l’utilisateur.</description>
+        ///         </item>
+        ///         <item>
+        ///             <description>Configure le ComboBox <see cref="cbRevue"/> avec la liste complète des revues.</description>
+        ///         </item>  
+        ///     </list>
+        /// </remarks>
+        private void ChargerRevues()
         {
             revuesOriginaux = controller.GetAllRevues();
 
-            // Crée une liste triable (SortableBindingList) et l'assigne à un BindingSource.
+            // Rendre triable le BindingSourcee au travers de la classe helper SortableBindingList.
             var sortableRevues = new SortableBindingList<Revue>(revuesOriginaux);
-            BindingSource bs = new BindingSource { DataSource = sortableRevues };
-            dgvRevues.DataSource = bs;
+            bindingSourceRevues.DataSource = sortableRevues;
+            dgvRevues.DataSource = bindingSourceRevues;
 
             // Active le tri automatique pour chaque colonne.
             foreach (DataGridViewColumn col in dgvRevues.Columns)
@@ -344,16 +402,16 @@ namespace MediaTekDocuments.view
 
             // Configuration des colonnes et de l'ordre d'affichage.
             dgvRevues.Columns["Id"].HeaderText = "N°";
-            dgvRevues.Columns["Titre"].HeaderText = "Titre";
-            dgvRevues.Columns["Genre"].HeaderText = "Genre";
+            dgvRevues.Columns[ColTitre].HeaderText = "Titre";
+            dgvRevues.Columns[ColGenre].HeaderText = "Genre";
             dgvRevues.Columns["Public"].HeaderText = "Public";
             dgvRevues.Columns["Rayon"].HeaderText = "Rayon";
             dgvRevues.Columns["Periodicite"].HeaderText = "Périodicité";
-            dgvRevues.Columns["DelaiMiseADispo"].HeaderText = "Délai de mise à dispo (jours)";
+            dgvRevues.Columns["DelaiMiseADispo"].HeaderText = "Mise à dispo (jours)";
 
             dgvRevues.Columns["Id"].DisplayIndex = 0;
-            dgvRevues.Columns["Titre"].DisplayIndex = 1;
-            dgvRevues.Columns["Genre"].DisplayIndex = 2;
+            dgvRevues.Columns[ColTitre].DisplayIndex = 1;
+            dgvRevues.Columns[ColGenre].DisplayIndex = 2;
 
             dgvRevues.Columns["Image"].Visible = false;
             dgvRevues.Columns["IdGenre"].Visible = false;
@@ -362,88 +420,84 @@ namespace MediaTekDocuments.view
 
             // Configuration du comboBoxRevue.
             cbRevue.DataSource = revuesOriginaux;
-            cbRevue.DisplayMember = "Titre";
+            cbRevue.DisplayMember = ColTitre;
             cbRevue.ValueMember = "Id";
         }
 
         /// <summary>
-        /// Gère l'événement Enter du TextBox txtRechercheRevues.
-        /// Efface le placeholder "Rechercher" et ajuste la couleur pour permettre la saisie.
+        /// Efface le placeholder "Rechercher" et modifie la couleur de la police pour permettre la saisie.
+        /// Utilise <see cref="UIHelper.GererEntreeTextBox"/>.
         /// </summary>
-        /// <param name="sender">Le TextBox txtRechercheRevues.</param>
-        /// <param name="e">Les données de l'événement.</param>
-        private void txtRechercheRevues_Enter(object sender, EventArgs e)
-        {
-            UIHelper.GererEntreeTextBox(txtRechercheRevues, "Rechercher");
-        }
+        private void txtRechercheRevues_Enter(object? sender, EventArgs e) => UIHelper.GererEntreeTextBox(txtRechercheRevues, PlaceholderText);
 
         /// <summary>
-        /// Gère l'événement Leave du TextBox txtRechercheRevues.
-        /// Restaure le placeholder "Rechercher" si le TextBox est vide.
+        /// Restaure le placeholder "Rechercher" si le textBox est vide et ajuste la couleur.
+        /// Utilise <see cref="UIHelper.GererSortieTextBox"/>.
         /// </summary>
-        /// <param name="sender">Le TextBox txtRechercheRevues.</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void txtRechercheRevues_Leave(object sender, EventArgs e)
-        {
-            UIHelper.GererSortieTextBox(txtRechercheRevues, "Rechercher");
-        }
+        private void txtRechercheRevues_Leave(object? sender, EventArgs e) => UIHelper.GererSortieTextBox(txtRechercheRevues, PlaceholderText);
+
 
         /// <summary>
-        /// Filtre dynamiquement la liste des revues affichée dans dgvRevues
-        /// en fonction du texte saisi dans txtRechercheRevues.
-        /// Si le texte est vide ou correspond au placeholder, le filtre est supprimé.
+        /// Filtre dynamiquement la liste des revues affichées dans le DataGridView
+        /// en fonction du texte saisi.
+        /// Si le champ de recherche est vide ou contient le placeholder, le filtre est réinitialisé.
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item><description>Le filtrage est réalisé par la méthode helper : <see cref="UIHelper.FiltrerBindingSource"/>.</description></item>
+        ///     </list>
+        /// </remarks>
         /// </summary>
-        /// <param name="sender">Le TextBox txtRechercheRevues.</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void txtRechercheRevues_TextChanged(object sender, EventArgs e)
+        private void txtRechercheRevues_TextChanged(object? sender, EventArgs e)
         {
-            if (dgvRevues.DataSource is BindingSource bs)
+            string texte = txtRechercheRevues.Text.Trim();
+
+            if (string.IsNullOrEmpty(texte) || texte == PlaceholderText)
             {
-                string texte = txtRechercheRevues.Text.Trim();
-
-                if (string.IsNullOrEmpty(texte) || texte == "Rechercher")
-                {
-                    // Remet la liste complète si champ vide.
-                    bs.DataSource = new SortableBindingList<Revue>(revuesOriginaux);
-                }
-                else
-                {
-                    UIHelper.FiltrerBindingSource<Revue>(bs, txtRechercheRevues, revuesOriginaux, "Id", "Titre", "Genre", "Public");
-                }
+                // Remet la liste complète si champ vide.
+                bindingSourceRevues.DataSource = new SortableBindingList<Revue>(revuesOriginaux);
+            }
+            else
+            {
+                UIHelper.FiltrerBindingSource(bindingSourceRevues, txtRechercheRevues, revuesOriginaux, "Id", ColTitre, ColGenre, "Public");
             }
         }
 
         /// <summary>
-        /// Crée un nouvel abonnement en se basant sur la revue sélectionnée dans cbRevue 
+        /// Crée un nouvel abonnement via <see cref="FrmAbonnementRevuesController.CreerAbonnement"/> en se basant sur la revue sélectionnée dans <see cref="cbRevue"/>
         /// et les données saisies dans les contrôles de souscription.
-        /// Valide les dates et le montant, et vérifie qu'aucun abonnement actif n'existe déjà pour la période.
-        /// En cas de succès, l'abonnement est créé via le contrôleur et la liste des abonnements est rechargée.
+        /// <remarks>
+        ///     <list type="bullet">
+        ///         <item><description>Validation au niveau des dates, du format des données.</description></item>
+        ///         <item><description>Vérifie qu'aucun abonnement actif similaire (pour la même revue) est déjà existant dans la même période pour éviter le chevauchement.</description></item>
+        ///         <item><description>Demande une confirmation à l'utilisateur pour valider le processus.</description></item>
+        ///     </list>
+        /// </remarks>
         /// </summary>
-        /// <param name="sender">Le bouton btnSouscrireAbonnement.</param>
-        /// <param name="e">Données de l'événement.</param>
-        private void btnSouscrireAbonnement_Click(object sender, EventArgs e)
+        private void btnSouscrireAbonnement_Click(object? sender, EventArgs e)
         {
-            Revue revueSelectionnee = cbRevue.SelectedItem as Revue;
-
-            if (revueSelectionnee == null)
+            // Vérifie que l'élément sélectionné du comboBox soit bien une instance de Revue.
+            // Puis l'affecte à la variable locale revueSelectionnee.
+            if (cbRevue.SelectedItem is not Revue revueSelectionnee)
             {
-                MessageBox.Show("Veuillez sélectionner une revue.", "Information", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("Veuillez sélectionner une revue.", MessageInformation, MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
+            // Définition des champs pour préparer l'abonnement.
             string idRevue = revueSelectionnee.Id;
             string titreRevue = revueSelectionnee.Titre;
             DateTime dateDebut = dtpDateDebutSouscription.Value;
             DateTime dateFin = dtpDateFinSouscription.Value;
+            double montant;
 
             if (dateDebut >= dateFin)
             {
-                MessageBox.Show("La date de début doit être antérieure à la date de fin.", "Erreur de date", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                MessageBox.Show("La date de début de la souscription doit être antérieure à la date de fin.", "Erreur de date", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
             // Vérifier que le montant est dans un format correct.
-            if (!double.TryParse(txtMontant.Text, out double montant) || montant <= 0)
+            if (!double.TryParse(txtMontant.Text, out montant) || montant <= 0)
             {
                 MessageBox.Show("Veuillez entrer un montant valide supérieur à 0.", "Montant invalide", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -456,8 +510,13 @@ namespace MediaTekDocuments.view
                 return;
             }
 
+            string message = $"""
+                Confirmez-vous la souscription à la revue "{titreRevue}"
+                du {dateDebut:dd/MM/yyyy} au {dateFin:dd/MM/yyyy} pour {montant:0.00} € ?
+            """;
+
             DialogResult confirmation = MessageBox.Show(
-                $"Confirmez-vous la souscription à la revue \"{titreRevue}\" du {dateDebut.ToShortDateString()} au {dateFin.ToShortDateString()} pour {montant} € ?",
+                message,
                 "Confirmer la souscription",
                 MessageBoxButtons.YesNo,
                 MessageBoxIcon.Question);
@@ -466,7 +525,7 @@ namespace MediaTekDocuments.view
                 return;
 
             // Création de l'objet.
-            Abonnement nouvelAbo = new Abonnement
+            Abonnement nouvelAbo = new()
             {
                 IdRevue = idRevue,
                 TitreRevue = titreRevue,
@@ -476,15 +535,17 @@ namespace MediaTekDocuments.view
             };
 
             bool resultat = controller.CreerAbonnement(nouvelAbo);
+            
             if (resultat)
             {
-                MessageBox.Show("Souscription enregistrée avec succès.", "Succès", MessageBoxButtons.OK, MessageBoxIcon.Information);
-                LoadAbonnements(); // Recharge les abonnements dans l'onglet 1 pour mettre à jour la liste des abonnements dynamiquement.
+                MessageBox.Show("Souscription enregistrée avec succès.", MessageSucces, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             else
             {
-                MessageBox.Show("Erreur lors de la création de l'abonnement.", "Erreur", MessageBoxButtons.OK, MessageBoxIcon.Error);
+                MessageBox.Show("Erreur lors de la création de l'abonnement.", MessageErreur, MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
+
+        #endregion
     }
 }

@@ -22,17 +22,22 @@ namespace MediaTekDocuments.dal
         /// <summary>
         /// Adresse de l'API REST.
         /// </summary>
-        private static readonly string uriApi = "http://localhost/rest_mediatekdocuments/";
+        private static readonly string uriApi;
+
+        /// <summary>
+        /// Credentials mot de passe.
+        /// </summary>
+        private static readonly string authenticationString;
 
         /// <summary>
         /// Instance unique de la classe Access (singleton).
         /// </summary>
-        private static Access instance = null;
+        private static Access instance = null!;
 
         /// <summary>
         /// Instance de ApiRest utilisée pour envoyer les requêtes et récupérer les réponses de l'API.
         /// </summary>
-        private readonly ApiRest api = null;
+        private readonly ApiRest api;
 
         /// <summary>
         /// Constante représentant la méthode HTTP GET.
@@ -53,7 +58,17 @@ namespace MediaTekDocuments.dal
         /// Constante représentant la méthode HTTP DELETE.
         /// </summary>
         private const string DELETE = "DELETE";
+        private const string PARAM_PREFIX = "champs=";
+        private const string DATE_ISO_FORMAT = "yyyy-MM-dd";
 
+        // 2) Constructeur static pour charger la config
+        static Access()
+        {
+            uriApi = Program.Configuration["ApiSettings:UriApi"]
+                     ?? throw new InvalidOperationException("ApiSettings:UriApi manquant");
+            authenticationString = Program.Configuration["ApiSettings:Authentication"]
+                                   ?? throw new InvalidOperationException("ApiSettings:Authentication manquant");
+        }
 
         /// <summary>
         /// Constructeur privé afin d'implémenter le pattern singleton.
@@ -62,10 +77,8 @@ namespace MediaTekDocuments.dal
         private Access()
         {
             logger.Info("Constructeur Access private appelé, instance créée");
-            String authenticationString;
             try
             {
-                authenticationString = "admin:adminpwd";
                 api = ApiRest.GetInstance(uriApi, authenticationString);
             }
             catch (Exception e)
@@ -82,7 +95,7 @@ namespace MediaTekDocuments.dal
         /// <returns>L'instance unique d'Access.</returns>
         public static Access GetInstance()
         {
-            if(instance == null)
+            if (instance == null)
             {
                 instance = new Access();
             }
@@ -156,7 +169,7 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Exemplaire.</returns>
         public List<Exemplaire> GetExemplairesRevue(string idDocument)
         {
-            String jsonIdDocument = convertToJson("id", idDocument);
+            String jsonIdDocument = ConvertToJson("id", idDocument);
             List<Exemplaire> lesExemplaires = TraitementRecup<Exemplaire>(GET, "exemplaire/" + jsonIdDocument, null);
             return lesExemplaires;
         }
@@ -171,7 +184,7 @@ namespace MediaTekDocuments.dal
             String jsonExemplaire = JsonConvert.SerializeObject(exemplaire, new CustomDateTimeConverter());
             try
             {
-                List<Exemplaire> liste = TraitementRecup<Exemplaire>(POST, "exemplaire", "champs=" + jsonExemplaire);
+                List<Exemplaire> liste = TraitementRecup<Exemplaire>(POST, "exemplaire", PARAM_PREFIX + jsonExemplaire);
                 return (liste != null);
             }
             catch (Exception ex)
@@ -189,15 +202,14 @@ namespace MediaTekDocuments.dal
         /// <param name="message">information envoyée dans l'url</param>
         /// <param name="parametres">paramètres à envoyer dans le body, au format "chp1=val1&chp2=val2&..."</param>
         /// <returns>liste d'objets récupérés (ou liste vide)</returns>
-        private List<T> TraitementRecup<T> (String methode, String message, String parametres)
+        private List<T> TraitementRecup<T> (String methode, String message, String? parametres)
         {
-            // trans
-            List<T> liste = new List<T>();
+            List<T> liste = [];
             try
             {
-                JObject retour = api.RecupDistant(methode, message, parametres);
+                JObject retour = api.RecupDistant(methode, message, parametres ?? string.Empty);
                 // extraction du code retourné
-                String code = (String)retour["code"];
+                string code = retour.Value<string>("code") ?? string.Empty;
                 if (code.Equals("200"))
                 {
                     // dans le cas du GET (select), récupération de la liste d'objets
@@ -205,7 +217,7 @@ namespace MediaTekDocuments.dal
                     {
                         String resultString = JsonConvert.SerializeObject(retour["result"]);
                         // construction de la liste d'objets à partir du retour de l'api
-                        liste = JsonConvert.DeserializeObject<List<T>>(resultString, new CustomBooleanJsonConverter());
+                        liste = JsonConvert.DeserializeObject<List<T>>(resultString, new CustomBooleanJsonConverter()) ?? [];
                     }
                 }
                 else
@@ -226,7 +238,7 @@ namespace MediaTekDocuments.dal
         /// <param name="nom">Le nom de la propriété.</param>
         /// <param name="valeur">La valeur associée.</param>
         /// <returns>Une chaîne JSON représentant le couple nom/valeur.</returns>
-        private String convertToJson(Object nom, Object valeur)
+        private static String ConvertToJson(Object nom, Object valeur)
         {
             Dictionary<Object, Object> dictionary = new Dictionary<Object, Object>();
             dictionary.Add(nom, valeur);
@@ -241,7 +253,7 @@ namespace MediaTekDocuments.dal
         {
             public CustomDateTimeConverter()
             {
-                base.DateTimeFormat = "yyyy-MM-dd";
+                base.DateTimeFormat = DATE_ISO_FORMAT;
             }
         }
 
@@ -279,11 +291,11 @@ namespace MediaTekDocuments.dal
         /// <returns>Liste d'objets Commande.</returns>
         public List<Commande> GetCommandesById(string idLivreDvd)
         {
-            string json = convertToJson("idLivreDvd", idLivreDvd);
+            string json = ConvertToJson("idLivreDvd", idLivreDvd);
             return TraitementRecup<Commande>(GET, "commandeparid/" + json, null);
         }
 
-        public Utilisateur SeConnecter(string login, string mdp)
+        public Utilisateur? SeConnecter(string login, string mdp)
         {
             var donnees = new Dictionary<string, string>
             {
@@ -295,12 +307,13 @@ namespace MediaTekDocuments.dal
 
             try
             {
-                JObject retour = api.RecupDistant(POST, "connexion", "champs=" + json);
-
-                if (retour["code"].ToString() == "200")
+                JObject retour = api.RecupDistant(POST, "connexion", PARAM_PREFIX + json);
+                string code = retour.Value<string>("code") ?? string.Empty;
+                
+                if (code == "200")
                 {
                     string resultString = JsonConvert.SerializeObject(retour["result"]);
-                    Utilisateur utilisateur = JsonConvert.DeserializeObject<Utilisateur>(resultString);
+                    Utilisateur? utilisateur = JsonConvert.DeserializeObject<Utilisateur>(resultString);
                     return utilisateur;
                 }
                 else
@@ -328,13 +341,13 @@ namespace MediaTekDocuments.dal
                 idLivreDvd = commande.IdLivreDvd,
                 nbExemplaire = commande.NbExemplaires,
                 montant = commande.Montant,
-                dateCommande = commande.DateCommande.ToString("yyyy-MM-dd")
+                dateCommande = commande.DateCommande.ToString(DATE_ISO_FORMAT)
             };
 
             string json = JsonConvert.SerializeObject(donnees, new CustomDateTimeConverter());
             try
             {
-                var result = TraitementRecup<Commande>(POST, "commandetotale", "champs=" + json);
+                var result = TraitementRecup<Commande>(POST, "commandetotale", PARAM_PREFIX + json);
                 return result != null;
             }
             catch (Exception ex)
@@ -376,7 +389,7 @@ namespace MediaTekDocuments.dal
         /// <returns>True si la suppression a réussi, sinon false.</returns>
         public bool SupprimerCommande(string idCommande)
         {
-            string json = convertToJson("id", idCommande);
+            string json = ConvertToJson("id", idCommande);
             try
             {
                 var result = TraitementRecup<Commande>(DELETE, "commande/" + json, null);
@@ -410,8 +423,8 @@ namespace MediaTekDocuments.dal
             {
                 // idCommande est géré par l'API.
                 idRevue = abonnement.IdRevue,
-                dateCommande = abonnement.DateCommande.ToString("yyyy-MM-dd"),
-                dateFinAbonnement = abonnement.DateFinAbonnement.ToString("yyyy-MM-dd"),
+                dateCommande = abonnement.DateCommande.ToString(DATE_ISO_FORMAT),
+                dateFinAbonnement = abonnement.DateFinAbonnement.ToString(DATE_ISO_FORMAT),
                 montant = abonnement.Montant,
                 nbExemplaire = 1,
             };
@@ -419,7 +432,7 @@ namespace MediaTekDocuments.dal
             string json = JsonConvert.SerializeObject(donnees, new CustomDateTimeConverter());
             try
             {
-                var result = TraitementRecup<Abonnement>(POST, "abonnement", "champs=" + json);
+                var result = TraitementRecup<Abonnement>(POST, "abonnement", PARAM_PREFIX + json);
                 return (result != null);
             }
             catch (Exception ex)
@@ -436,7 +449,7 @@ namespace MediaTekDocuments.dal
         /// <returns>True si la suppression a réussi, sinon false.</returns>
         public bool SupprimerAbonnement(string idAbonnement)
         {
-            string json = convertToJson("id", idAbonnement);
+            string json = ConvertToJson("id", idAbonnement);
             try
             {
                 var result = TraitementRecup<Abonnement>(DELETE, "abonnement/" + json, null);

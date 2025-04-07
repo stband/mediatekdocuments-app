@@ -1,5 +1,4 @@
-﻿
-namespace MediaTekDocuments.model
+﻿namespace MediaTekDocuments.model
 {
     /// <summary>
     /// Classe métier Document (réunit les infomations communes à tous les documents : Livre, Revue, Dvd)
@@ -16,7 +15,7 @@ namespace MediaTekDocuments.model
         public string IdRayon { get; }
         public string Rayon { get; }
 
-        public Document(string id, string titre, string image, string idGenre, string genre, string idPublic, string lePublic, string idRayon, string rayon)
+        public Document(string id, string titre, string image, string idGenre, string genre, string idPublic, string lePublic, string idRayon, string rayon) // NOSONAR S107
         {
             Id = id;
             Titre = titre;

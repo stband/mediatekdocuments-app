@@ -33,10 +33,16 @@ namespace MediaTekDocuments.view
             List<Abonnement> abonnements = access.GetAllAbonnements();
             List<String> abonnementsExpirants = Abonnement.GetAbonnementsExpirantDans30Jours(abonnements);
 
-            if (abonnementsExpirants.Any())
+            if (abonnementsExpirants.Count > 0)
             {
-                string message = "ATTENTION : certains abonnements expirent dans moins de 30 jours :\n" + string.Join("\n", abonnementsExpirants);
-                MessageBox.Show(message, "Abonnements à renouveler", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                string message = "Certains abonnements expirent dans moins de 30 jours :\n" + string.Join("\n", abonnementsExpirants);
+                
+                MessageBox.Show(
+                    message,
+                    "Abonnements à renouveler",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information
+                );
             }
         }
 
@@ -58,12 +64,7 @@ namespace MediaTekDocuments.view
                 btnAbonnements.Visible = false;
             }
 
-            if (service == "administratif")
-            {
-                this.Shown += FrmAccueil_Shown;
-            }
-
-            if (service == "administrateur")
+            if (service == "administratif" || service == "administrateur")
             {
                 this.Shown += FrmAccueil_Shown;
             }
@@ -74,7 +75,7 @@ namespace MediaTekDocuments.view
         /// </summary>
         /// <param name="sender">Le bouton "Documents".</param>
         /// <param name="e">Les données de l'événement.</param>
-        private void btnDocuments_Click(object sender, EventArgs e)
+        private void btnDocuments_Click(object? sender, EventArgs e)
         {
             FrmMediatek frmDocuments = new FrmMediatek();
             frmDocuments.ShowDialog();
@@ -85,7 +86,7 @@ namespace MediaTekDocuments.view
         /// </summary>
         /// <param name="sender">Le bouton "Commandes".</param>
         /// <param name="e">Les données de l'événement.</param>
-        private void btnCommandes_Click(object sender, EventArgs e)
+        private void btnCommandes_Click(object? sender, EventArgs e)
         {
             FrmSuiviCommandes frmCommandes = new FrmSuiviCommandes();
             frmCommandes.ShowDialog();
@@ -96,7 +97,7 @@ namespace MediaTekDocuments.view
         /// </summary>
         /// <param name="sender">Le bouton "Abonnements".</param>
         /// <param name="e">Les données de l'événement.</param>
-        private void btnAbonnements_Click(object sender, EventArgs e)
+        private void btnAbonnements_Click(object? sender, EventArgs e)
         {
             FrmAbonnementRevues frmAbonnements = new FrmAbonnementRevues();
             frmAbonnements.ShowDialog();
@@ -108,7 +109,7 @@ namespace MediaTekDocuments.view
         /// </summary>
         /// <param name="sender">Le formulaire <see cref="FrmAccueil"/>.</param>
         /// <param name="e">Les données de l'événement.</param>
-        private void FrmAccueil_Shown(object sender, EventArgs e)
+        private void FrmAccueil_Shown(object? sender, EventArgs e)
         {
             VerifierAbonnementsExpirants();
         }
@@ -119,13 +120,13 @@ namespace MediaTekDocuments.view
         /// </summary>
         /// <param name="sender">La PictureBox de déconnexion.</param>
         /// <param name="e">Les données de l'événement.</param>
-        private void pbLogout_Click(object sender, EventArgs e)
+        private void pbLogout_Click(object? sender, EventArgs e)
         {
-            Session.Utilisateur = null;
-            this.Hide();
+            Session.Utilisateur = null!;
+            Hide();
             FrmConnexion frmConnexion = new FrmConnexion();
             frmConnexion.ShowDialog();
-            this.Close();
+            Close();
         }
     }
 }

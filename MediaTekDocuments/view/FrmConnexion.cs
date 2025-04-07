@@ -41,15 +41,14 @@ namespace MediaTekDocuments.view
                 return;
             }
 
-            FrmConnexionController controller = new FrmConnexionController();
-            bool connexionOk = controller.SeConnecter(login, mdp);
+            bool connexionOk = FrmConnexionController.SeConnecter(login, mdp);
 
             if (connexionOk)
             {
                 // Gérer les services qui sont interdits à la connexion (seulement culture pour l'instant).
                 if (Session.Utilisateur.Service == "Culture")
                 {
-                    MessageBox.Show($"Accès refusé : Le service {Session.Utilisateur.Service} n’est pas autorisé à utiliser cette application.", "Accès Refusé", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show($"Accès refusé : Le service {Session.Utilisateur.Service} n’est pas autorisé à utiliser cette application.", "Accès Refusé", MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 else
                 {

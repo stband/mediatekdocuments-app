@@ -1,10 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.ComponentModel;
-using System.Reflection;
 
 namespace MediaTekDocuments.helper
 {
@@ -23,7 +20,7 @@ namespace MediaTekDocuments.helper
     {
         private bool isSortedValue;
         private ListSortDirection sortDirectionValue;
-        private PropertyDescriptor sortPropertyValue;
+        private PropertyDescriptor? sortPropertyValue;
 
         /// <summary>
         /// Constructeur par défaut.
@@ -39,7 +36,7 @@ namespace MediaTekDocuments.helper
         protected override bool SupportsSortingCore => true;
         protected override bool IsSortedCore => isSortedValue;
         protected override ListSortDirection SortDirectionCore => sortDirectionValue;
-        protected override PropertyDescriptor SortPropertyCore => sortPropertyValue;
+        protected override PropertyDescriptor SortPropertyCore => sortPropertyValue!;
 
         /// <summary>
         /// Applique le tri sur la liste en fonction de la propriété et de la direction fournies.
@@ -48,7 +45,7 @@ namespace MediaTekDocuments.helper
         /// <param name="direction">La direction du tri (Ascending ou Descending)</param>
         protected override void ApplySortCore(PropertyDescriptor prop, ListSortDirection direction)
         {
-            List<T> items = this.Items as List<T>;
+            List<T>? items = this.Items as List<T>;
             if (items != null)
             {
                 var sortedItems = direction == ListSortDirection.Ascending ?
@@ -66,7 +63,7 @@ namespace MediaTekDocuments.helper
                 sortDirectionValue = direction;
                 sortPropertyValue = prop;
 
-                this.OnListChanged(new ListChangedEventArgs(ListChangedType.Reset, -1));
+                OnListChanged(new ListChangedEventArgs(ListChangedType.Reset, -1));
             }
         }
 

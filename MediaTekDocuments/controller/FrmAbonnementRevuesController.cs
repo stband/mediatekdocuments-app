@@ -4,26 +4,21 @@ using MediaTekDocuments.model;
 namespace MediaTekDocuments.controller
 {
     /// <summary>
-    /// Controller pour la gestion des abonnements et des revues.
+    /// Contrôleur pour la gestion des abonnements (commandes liées aux revues) et les revues.
     /// Communique avec la couche d'accès aux données via la classe Access.
     /// </summary>
     public class FrmAbonnementRevuesController
     {
-        private readonly Access access;
-
         /// <summary>
-        /// Initialise une nouvelle instance de FrmAbonnementRevuesController.
+        /// Objet d'accès aux données
         /// Obtient l'instance unique de la classe Access.
         /// </summary>
-        public FrmAbonnementRevuesController()
-        {
-            access = Access.GetInstance();
-        }
+        private readonly Access access = Access.GetInstance();
 
         /// <summary>
         /// Vérifie si un abonnement actif existe pour une revue,
-        /// en détectant un chevauchement entre la période d’un abonnement existant
-        /// et la période que l’on souhaite créer.
+        /// en détectant un chevauchement entre la période existante
+        /// et celle qu'on souhaite créer.
         /// </summary>
         /// <param name="idRevue">Identifiant de la revue concernée.</param>
         /// <param name="dateDebut">Date de début de l’abonnement souhaité.</param>

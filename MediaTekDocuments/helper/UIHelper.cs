@@ -7,6 +7,9 @@ using System.Threading.Tasks;
 
 namespace MediaTekDocuments.helper
 {
+    /// <summary>
+    /// Fournit des méthodes utilitaires pour l'UI (TextBox, BindingSource, etc.).
+    /// </summary>
     public static class UIHelper
     {
         /// <summary>
@@ -24,7 +27,7 @@ namespace MediaTekDocuments.helper
         }
 
         /// <summary>
-        /// Gère l'événement Leave d'une TextBox : restaure le texte par défaut si la TextBox est vide.
+        /// Gère l'événement Leave d'une TextBox : restaure le texte par défaut si la TextBox est vide, et modifie la couleur de police en gris.
         /// </summary>
         /// <param name="textBox">La TextBox concernée.</param>
         /// <param name="texteParDefaut">Le texte par défaut à réafficher (exemple : "Rechercher").</param>
@@ -52,6 +55,7 @@ namespace MediaTekDocuments.helper
         /// <summary>
         /// Filtre dynamiquement une BindingSource sur les propriétés spécifiées.
         /// Réaffecte la liste d'origine si le champ de recherche est vide.
+        /// C'est la méthode utilisée pour rechercher dynamiquement dans un DataGridView.
         /// </summary>
         /// <typeparam name="T">Type d'objet contenu dans la BindingSource</typeparam>
         /// <param name="bindingSource">La source de données du DataGridView</param>
@@ -75,7 +79,7 @@ namespace MediaTekDocuments.helper
                     {
                         var prop = typeof(T).GetProperty(col);
                         var value = prop?.GetValue(obj, null)?.ToString();
-                        return !string.IsNullOrEmpty(value) && value.ToLower().Contains(texteRecherche);
+                        return !string.IsNullOrEmpty(value) && value.Contains(texteRecherche, StringComparison.CurrentCultureIgnoreCase);
                     }))
                     .ToList();
                 bindingSource.DataSource = new BindingList<T>(listeFiltree);

@@ -12,15 +12,17 @@ namespace MediaTekDocuments.manager
         /// <summary>
         /// unique instance de la classe
         /// </summary>
-        private static ApiRest instance = null;
+        private static ApiRest? instance = null;
+        
         /// <summary>
         /// Objet de connexion à l'api
         /// </summary>
         private readonly HttpClient httpClient;
+        
         /// <summary>
         /// Canal http pour l'envoi du message et la récupération de la réponse
         /// </summary>
-        private HttpResponseMessage httpResponse;
+        private HttpResponseMessage? httpResponse;
 
         /// <summary>
         /// Constructeur privé pour préparer la connexion (éventuellement sécurisée)
@@ -33,7 +35,7 @@ namespace MediaTekDocuments.manager
             // prise en compte dans l'url de l'authentificaiton (basic authorization), si elle n'est pas vide
             if (!String.IsNullOrEmpty(authenticationString))
             {
-                String base64EncodedAuthenticationString = Convert.ToBase64String(System.Text.ASCIIEncoding.ASCII.GetBytes(authenticationString));
+                var base64EncodedAuthenticationString = Convert.ToBase64String(System.Text.ASCIIEncoding.ASCII.GetBytes(authenticationString));
                 httpClient.DefaultRequestHeaders.Add("Authorization", "Basic " + base64EncodedAuthenticationString);
             }
         }
@@ -46,11 +48,7 @@ namespace MediaTekDocuments.manager
         /// <returns></returns>
         public static ApiRest GetInstance(String uriApi, String authenticationString)
         {
-            if(instance == null)
-            {
-                instance = new ApiRest(uriApi, authenticationString);
-            }
-            return instance;
+            return instance ??= new ApiRest(uriApi, authenticationString);
         }
 
         /// <summary>
@@ -60,11 +58,11 @@ namespace MediaTekDocuments.manager
         /// <param name="message">message à envoyer dans l'URL</param>
         /// <param name="parametres">contenu de variables à mettre dans body</param>
         /// <returns>liste d'objets (select) ou liste vide (ok) ou null si erreur</returns>
-        public JObject RecupDistant(string methode, string message, String parametres)
+        public JObject RecupDistant(string methode, string message, String? parametres)
         {
             // transformation des paramètres pour les mettre dans le body
-            StringContent content = null;
-            if(!(parametres is null))
+            StringContent? content = null;
+            if (parametres is not null)
             {
                 content = new StringContent(parametres, System.Text.Encoding.UTF8, "application/x-www-form-urlencoded");
             }
@@ -74,22 +72,25 @@ namespace MediaTekDocuments.manager
                 case "GET":
                     httpResponse = httpClient.GetAsync(message).Result;
                     break;
+                
                 case "POST":
                     httpResponse = httpClient.PostAsync(message, content).Result;
                     break;
+                
                 case "PUT":
                     httpResponse = httpClient.PutAsync(message, content).Result;
                     break;
+                
                 case "DELETE":
                     httpResponse = httpClient.DeleteAsync(message).Result;
                     break;
-                // methode incorrecte
+                
                 default:
-                    return new JObject();
+                    // Verbe HTTP incorrect : on retourne un JSON vide
+                    return [];
             }
             // récupération de l'information retournée par l'api
             return JObject.Parse(httpResponse.Content.ReadAsStringAsync().Result);
         }
-
     }
 }

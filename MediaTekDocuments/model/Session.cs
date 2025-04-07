@@ -7,7 +7,8 @@
     {
         /// <summary>
         /// Objet de l'utilisateur actuellement connecté.
+        /// Initialisé par le contrôleur de connexion avant tout usage.
         /// </summary>
-        public static Utilisateur Utilisateur { get; set; }
+        public static Utilisateur Utilisateur { get; set; } = null!;
     }
 }

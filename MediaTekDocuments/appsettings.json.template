@@ -1,0 +1,6 @@
+{
+  "ApiSettings": {
+    "UriApi": "http://localhost/rest_mediatekdocuments/",
+    "Authentication": ""
+  }
+}

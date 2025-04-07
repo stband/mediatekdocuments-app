@@ -225,7 +225,7 @@
             dgvToutesCommandes.Size = new Size(1381, 670);
             dgvToutesCommandes.TabIndex = 3;
             dgvToutesCommandes.CellClick += dgvToutesCommandes_CellClick;
-            dgvToutesCommandes.ColumnHeaderMouseClick += dgvToutesCommandes_ColumnHeaderMouseClick;
+            dgvToutesCommandes.RowPrePaint += dgvToutesCommandes_RowPrePaint;
             // 
             // tabCommandesLivres
             // 
@@ -277,7 +277,6 @@
             dgvCommandesLivre.Size = new Size(1394, 562);
             dgvCommandesLivre.TabIndex = 3;
             dgvCommandesLivre.CellContentClick += dgvCommandesLivre_CellClick;
-            dgvCommandesLivre.ColumnHeaderMouseClick += dgvCommandesLivre_ColumnHeaderMouseClick;
             // 
             // lblNouvelleCommande2
             // 
@@ -414,7 +413,6 @@
             dgvCommandesDVD.Size = new Size(1394, 562);
             dgvCommandesDVD.TabIndex = 3;
             dgvCommandesDVD.CellClick += dgvCommandesDVD_CellClick;
-            dgvCommandesDVD.ColumnHeaderMouseClick += dgvCommandesDVD_ColumnHeaderMouseClick;
             // 
             // lblNouvelleCommande3
             // 

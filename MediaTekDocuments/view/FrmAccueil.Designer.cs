@@ -146,6 +146,7 @@
             Controls.Add(panelMenu);
             Controls.Add(pbBanniere);
             Name = "FrmAccueil";
+            StartPosition = FormStartPosition.CenterScreen;
             Text = "Accueil - Mediatek Documents";
             panelMenu.ResumeLayout(false);
             ((System.ComponentModel.ISupportInitialize)pbLogout).EndInit();
