@@ -100,14 +100,18 @@ Cloner le dépôt depuis le répertoire de destination
 git clone https://github.com/stband/mediatekdocuments-app.git
 cd mediatekdocuments-app
 ```
-### Récupérer et installer l'API REST
+### Installer et configurer l'API REST
 
 - L'API REST est disponible ici : (https://github.com/stband/mediatekdocuments-rest-api).
-- Elle contient aussi la base de données et les explications pour tout configurer (dans le README correspondant).
+- Elle contient aussi la base de données et les explications pour la configurer (dans le README correspondant).
+
+### Configurer l'authentification à l'API REST depuis l'application
+
+Voir [la configuration de l'authentification à l’API](docs/configuration-auth-api.md) pour plus d'infos.
 
 ### Configurer et lancer l'application
 
-Dans la CLI (powershell/cmd)
+Dans le CLI (powershell/cmd)
 
 1. Restaurer tous les packages NuGet
 

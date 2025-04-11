@@ -1,69 +1,101 @@
-﻿using System;
-using System.Collections.Generic;
-using MediaTekDocuments.model;
+﻿using MediaTekDocuments.model;
 using MediaTekDocuments.manager;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using Newtonsoft.Json.Linq;
-using System.Configuration;
-using System.Linq;
+using NLog;
 
 namespace MediaTekDocuments.dal
 {
+
     /// <summary>
-    /// Classe d'accès aux données
+    /// Classe d'accès aux données. 
+    /// Gère la communication avec l'API REST pour réaliser les opérations CRUD sur les entités.
     /// </summary>
     public class Access
     {
         /// <summary>
-        /// adresse de l'API
+        /// Objet pour gérer les logs via Nlog.
         /// </summary>
-        private static readonly string uriApi = "http://localhost/rest_mediatekdocuments/";
-        /// <summary>
-        /// instance unique de la classe
-        /// </summary>
-        private static Access instance = null;
-        /// <summary>
-        /// instance de ApiRest pour envoyer des demandes vers l'api et recevoir la réponse
-        /// </summary>
-        private readonly ApiRest api = null;
-        /// <summary>
-        /// méthode HTTP pour select
-        /// </summary>
-        private const string GET = "GET";
-        /// <summary>
-        /// méthode HTTP pour insert
-        /// </summary>
-        private const string POST = "POST";
-        /// <summary>
-        /// méthode HTTP pour update
+        private static readonly Logger logger = LogManager.GetCurrentClassLogger();
 
         /// <summary>
-        /// Méthode privée pour créer un singleton
-        /// initialise l'accès à l'API
+        /// Adresse de l'API REST.
+        /// </summary>
+        private static readonly string uriApi;
+
+        /// <summary>
+        /// Credentials mot de passe.
+        /// </summary>
+        private static readonly string authenticationString;
+
+        /// <summary>
+        /// Instance unique de la classe Access (singleton).
+        /// </summary>
+        private static Access instance = null!;
+
+        /// <summary>
+        /// Instance de ApiRest utilisée pour envoyer les requêtes et récupérer les réponses de l'API.
+        /// </summary>
+        private readonly ApiRest api;
+
+        /// <summary>
+        /// Constante représentant la méthode HTTP GET.
+        /// </summary>
+        private const string GET = "GET";
+
+        /// <summary>
+        /// Constante représentant la méthode HTTP POST.
+        /// </summary>
+        private const string POST = "POST";
+
+        /// <summary>
+        /// Constante représentant la méthode HTTP PUT.
+        /// </summary>
+        private const string PUT = "PUT";
+
+        /// <summary>
+        /// Constante représentant la méthode HTTP DELETE.
+        /// </summary>
+        private const string DELETE = "DELETE";
+        private const string PARAM_PREFIX = "champs=";
+        private const string DATE_ISO_FORMAT = "yyyy-MM-dd";
+
+        // 2) Constructeur static pour charger la config
+        static Access()
+        {
+            uriApi = Program.Configuration["ApiSettings:UriApi"]
+                     ?? throw new InvalidOperationException("ApiSettings:UriApi manquant");
+            authenticationString = Program.Configuration["ApiSettings:Authentication"]
+                                   ?? throw new InvalidOperationException("ApiSettings:Authentication manquant");
+        }
+
+        /// <summary>
+        /// Constructeur privé afin d'implémenter le pattern singleton.
+        /// Initialise l'accès à l'API avec une chaîne d'authentification.
         /// </summary>
         private Access()
         {
-            String authenticationString;
+            logger.Info("Constructeur Access private appelé, instance créée");
             try
             {
-                authenticationString = "admin:adminpwd";
                 api = ApiRest.GetInstance(uriApi, authenticationString);
             }
             catch (Exception e)
             {
-                Console.WriteLine(e.Message);
+                logger.Error(e, "Initialisation de l'API REST échouée");
                 Environment.Exit(0);
             }
         }
 
         /// <summary>
-        /// Création et retour de l'instance unique de la classe
+        /// Retourne l'instance unique de la classe Access.
+        /// Créée lors du premier appel (singleton).
         /// </summary>
-        /// <returns>instance unique de la classe</returns>
+        /// <returns>L'instance unique d'Access.</returns>
         public static Access GetInstance()
         {
-            if(instance == null)
+            if (instance == null)
             {
                 instance = new Access();
             }
@@ -71,9 +103,9 @@ namespace MediaTekDocuments.dal
         }
 
         /// <summary>
-        /// Retourne tous les genres à partir de la BDD
+        /// Retourne tous les genres à partir de la base de données.
         /// </summary>
-        /// <returns>Liste d'objets Genre</returns>
+        /// <returns>Liste d'objets Genre convertis en liste d'objets Categorie.</returns>
         public List<Categorie> GetAllGenres()
         {
             IEnumerable<Genre> lesGenres = TraitementRecup<Genre>(GET, "genre", null);
@@ -81,9 +113,9 @@ namespace MediaTekDocuments.dal
         }
 
         /// <summary>
-        /// Retourne tous les rayons à partir de la BDD
+        /// Retourne tous les rayons à partir de la base de données.
         /// </summary>
-        /// <returns>Liste d'objets Rayon</returns>
+        /// <returns>Liste d'objets Rayon convertis en liste d'objets Categorie.</returns>
         public List<Categorie> GetAllRayons()
         {
             IEnumerable<Rayon> lesRayons = TraitementRecup<Rayon>(GET, "rayon", null);
@@ -91,9 +123,9 @@ namespace MediaTekDocuments.dal
         }
 
         /// <summary>
-        /// Retourne toutes les catégories de public à partir de la BDD
+        /// Retourne toutes les catégories de public à partir de la base de données.
         /// </summary>
-        /// <returns>Liste d'objets Public</returns>
+        /// <returns>Liste d'objets Public convertis en liste d'objets Categorie.</returns>
         public List<Categorie> GetAllPublics()
         {
             IEnumerable<Public> lesPublics = TraitementRecup<Public>(GET, "public", null);
@@ -101,9 +133,9 @@ namespace MediaTekDocuments.dal
         }
 
         /// <summary>
-        /// Retourne toutes les livres à partir de la BDD
+        /// Retourne tous les livres à partir de la base de données.
         /// </summary>
-        /// <returns>Liste d'objets Livre</returns>
+        /// <returns>Liste d'objets Livre.</returns>
         public List<Livre> GetAllLivres()
         {
             List<Livre> lesLivres = TraitementRecup<Livre>(GET, "livre", null);
@@ -111,9 +143,9 @@ namespace MediaTekDocuments.dal
         }
 
         /// <summary>
-        /// Retourne toutes les dvd à partir de la BDD
+        /// Retourne tous les DVD à partir de la base de données.
         /// </summary>
-        /// <returns>Liste d'objets Dvd</returns>
+        /// <returns>Liste d'objets Dvd.</returns>
         public List<Dvd> GetAllDvd()
         {
             List<Dvd> lesDvd = TraitementRecup<Dvd>(GET, "dvd", null);
@@ -121,44 +153,43 @@ namespace MediaTekDocuments.dal
         }
 
         /// <summary>
-        /// Retourne toutes les revues à partir de la BDD
+        /// Retourne toutes les revues à partir de la base de données.
         /// </summary>
-        /// <returns>Liste d'objets Revue</returns>
+        /// <returns>Liste d'objets Revue.</returns>
         public List<Revue> GetAllRevues()
         {
             List<Revue> lesRevues = TraitementRecup<Revue>(GET, "revue", null);
             return lesRevues;
         }
 
-
         /// <summary>
-        /// Retourne les exemplaires d'une revue
+        /// Retourne les exemplaires d'une revue spécifiée.
         /// </summary>
-        /// <param name="idDocument">id de la revue concernée</param>
-        /// <returns>Liste d'objets Exemplaire</returns>
+        /// <param name="idDocument">Identifiant de la revue concernée.</param>
+        /// <returns>Liste d'objets Exemplaire.</returns>
         public List<Exemplaire> GetExemplairesRevue(string idDocument)
         {
-            String jsonIdDocument = convertToJson("id", idDocument);
+            String jsonIdDocument = ConvertToJson("id", idDocument);
             List<Exemplaire> lesExemplaires = TraitementRecup<Exemplaire>(GET, "exemplaire/" + jsonIdDocument, null);
             return lesExemplaires;
         }
 
         /// <summary>
-        /// ecriture d'un exemplaire en base de données
+        /// Insère un nouvel exemplaire dans la base de données.
         /// </summary>
-        /// <param name="exemplaire">exemplaire à insérer</param>
-        /// <returns>true si l'insertion a pu se faire (retour != null)</returns>
+        /// <param name="exemplaire">L'objet Exemplaire à insérer.</param>
+        /// <returns>True si l'insertion est réussie, sinon false.</returns>
         public bool CreerExemplaire(Exemplaire exemplaire)
         {
             String jsonExemplaire = JsonConvert.SerializeObject(exemplaire, new CustomDateTimeConverter());
             try
             {
-                List<Exemplaire> liste = TraitementRecup<Exemplaire>(POST, "exemplaire", "champs=" + jsonExemplaire);
+                List<Exemplaire> liste = TraitementRecup<Exemplaire>(POST, "exemplaire", PARAM_PREFIX + jsonExemplaire);
                 return (liste != null);
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex.Message);
+                logger.Error(ex, "Création d'exemplaire échouée");
             }
             return false;
         }
@@ -171,15 +202,14 @@ namespace MediaTekDocuments.dal
         /// <param name="message">information envoyée dans l'url</param>
         /// <param name="parametres">paramètres à envoyer dans le body, au format "chp1=val1&chp2=val2&..."</param>
         /// <returns>liste d'objets récupérés (ou liste vide)</returns>
-        private List<T> TraitementRecup<T> (String methode, String message, String parametres)
+        private List<T> TraitementRecup<T> (String methode, String message, String? parametres)
         {
-            // trans
-            List<T> liste = new List<T>();
+            List<T> liste = [];
             try
             {
-                JObject retour = api.RecupDistant(methode, message, parametres);
+                JObject retour = api.RecupDistant(methode, message, parametres ?? string.Empty);
                 // extraction du code retourné
-                String code = (String)retour["code"];
+                string code = retour.Value<string>("code") ?? string.Empty;
                 if (code.Equals("200"))
                 {
                     // dans le cas du GET (select), récupération de la liste d'objets
@@ -187,28 +217,28 @@ namespace MediaTekDocuments.dal
                     {
                         String resultString = JsonConvert.SerializeObject(retour["result"]);
                         // construction de la liste d'objets à partir du retour de l'api
-                        liste = JsonConvert.DeserializeObject<List<T>>(resultString, new CustomBooleanJsonConverter());
+                        liste = JsonConvert.DeserializeObject<List<T>>(resultString, new CustomBooleanJsonConverter()) ?? [];
                     }
                 }
                 else
                 {
-                    Console.WriteLine("code erreur = " + code + " message = " + (String)retour["message"]);
+                    logger.Warn("API a répondu code={0}, message={1}", code, retour["message"]);
                 }
             }catch(Exception e)
             {
-                Console.WriteLine("Erreur lors de l'accès à l'API : "+e.Message);
+                logger.Error(e, "Exception dans TraitementRecup<{0}>", typeof(T).Name);
                 Environment.Exit(0);
             }
             return liste;
         }
 
         /// <summary>
-        /// Convertit en json un couple nom/valeur
+        /// Convertit un couple nom/valeur en une chaîne JSON.
         /// </summary>
-        /// <param name="nom"></param>
-        /// <param name="valeur"></param>
-        /// <returns>couple au format json</returns>
-        private String convertToJson(Object nom, Object valeur)
+        /// <param name="nom">Le nom de la propriété.</param>
+        /// <param name="valeur">La valeur associée.</param>
+        /// <returns>Une chaîne JSON représentant le couple nom/valeur.</returns>
+        private static String ConvertToJson(Object nom, Object valeur)
         {
             Dictionary<Object, Object> dictionary = new Dictionary<Object, Object>();
             dictionary.Add(nom, valeur);
@@ -216,13 +246,14 @@ namespace MediaTekDocuments.dal
         }
 
         /// <summary>
-        /// Modification du convertisseur Json pour gérer le format de date
+        /// Convertisseur personnalisé de dates pour le sérialiseur JSON.
+        /// Utilise le format "yyyy-MM-dd".
         /// </summary>
         private sealed class CustomDateTimeConverter : IsoDateTimeConverter
         {
             public CustomDateTimeConverter()
             {
-                base.DateTimeFormat = "yyyy-MM-dd";
+                base.DateTimeFormat = DATE_ISO_FORMAT;
             }
         }
 
@@ -244,5 +275,191 @@ namespace MediaTekDocuments.dal
             }
         }
 
+        /// <summary>
+        /// Retourne toutes les commandes à partir de la base de données.
+        /// </summary>
+        /// <returns>Liste d'objets Commande.</returns>
+        public List<Commande> GetToutesCommandes()
+        {
+            return TraitementRecup<Commande>(GET, "commande", null);
+        }
+
+        /// <summary>
+        /// Retourne les commandes associées à un livre ou DVD en fonction de son identifiant.
+        /// </summary>
+        /// <param name="idLivreDvd">L'identifiant du livre ou DVD.</param>
+        /// <returns>Liste d'objets Commande.</returns>
+        public List<Commande> GetCommandesById(string idLivreDvd)
+        {
+            string json = ConvertToJson("idLivreDvd", idLivreDvd);
+            return TraitementRecup<Commande>(GET, "commandeparid/" + json, null);
+        }
+
+        public Utilisateur? SeConnecter(string login, string mdp)
+        {
+            var donnees = new Dictionary<string, string>
+            {
+                { "login", login },
+                { "mdp", mdp }
+            };
+
+            string json = JsonConvert.SerializeObject(donnees);
+
+            try
+            {
+                JObject retour = api.RecupDistant(POST, "connexion", PARAM_PREFIX + json);
+                string code = retour.Value<string>("code") ?? string.Empty;
+                
+                if (code == "200")
+                {
+                    string resultString = JsonConvert.SerializeObject(retour["result"]);
+                    Utilisateur? utilisateur = JsonConvert.DeserializeObject<Utilisateur>(resultString);
+                    return utilisateur;
+                }
+                else
+                {
+                    logger.Warn("Erreur de connexion : " + retour["message"]);
+                    return null;
+                }
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Erreur API");
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// Crée une commande complète en enregistrant les informations de commande.
+        /// </summary>
+        /// <param name="commande">L'objet Commande à créer.</param>
+        /// <returns>True si l'insertion a réussi, sinon false.</returns>
+        public bool CreerCommandeComplete(Commande commande)
+        {
+            var donnees = new
+            {
+                idLivreDvd = commande.IdLivreDvd,
+                nbExemplaire = commande.NbExemplaires,
+                montant = commande.Montant,
+                dateCommande = commande.DateCommande.ToString(DATE_ISO_FORMAT)
+            };
+
+            string json = JsonConvert.SerializeObject(donnees, new CustomDateTimeConverter());
+            try
+            {
+                var result = TraitementRecup<Commande>(POST, "commandetotale", PARAM_PREFIX + json);
+                return result != null;
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Échec création de commande");
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Modifie le statut d'une commande en mettant à jour son identifiant de suivi.
+        /// </summary>
+        /// <param name="idCommande">L'identifiant de la commande à modifier.</param>
+        /// <param name="nouvelIdSuivi">Le nouvel identifiant de suivi à affecter.</param>
+        /// <returns>True si la mise à jour a réussi, sinon false.</returns>
+        public bool ModifierStatutCommande(string idCommande, string nouvelIdSuivi)
+        {
+            var data = new Dictionary<string, string>
+            {
+                { "idSuivi", nouvelIdSuivi }
+            };
+            string json = JsonConvert.SerializeObject(data);
+            try
+            {
+                var result = TraitementRecup<Commande>(PUT, "commandedocument", "id=" + idCommande + "&champs=" + json);
+                return result != null;
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Échec mise à jour du statut commande : {0}", idCommande);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Supprime une commande en fonction de son identifiant.
+        /// </summary>
+        /// <param name="idCommande">L'identifiant de la commande à supprimer.</param>
+        /// <returns>True si la suppression a réussi, sinon false.</returns>
+        public bool SupprimerCommande(string idCommande)
+        {
+            string json = ConvertToJson("id", idCommande);
+            try
+            {
+                var result = TraitementRecup<Commande>(DELETE, "commande/" + json, null);
+                return result != null;
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Échec suppression commande {0}", idCommande);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Retourne tous les abonnements à partir de la base de données.
+        /// </summary>
+        /// <returns>Liste d'objets Abonnement</returns>
+        public List<Abonnement> GetAllAbonnements()
+        {
+            List<Abonnement> lesAbonnements = TraitementRecup<Abonnement>(GET, "abonnement", null);
+            return lesAbonnements;
+        }
+
+        /// <summary>
+        /// Crée un nouvel abonnement dans la base de données.
+        /// </summary>
+        /// <param name="abonnement">L'objet Abonnement à créer.</param>
+        /// <returns>True si l'abonnement a été créé avec succès, sinon false.</returns>
+        public bool CreerAbonnement(Abonnement abonnement)
+        {
+            var donnees = new
+            {
+                // idCommande est géré par l'API.
+                idRevue = abonnement.IdRevue,
+                dateCommande = abonnement.DateCommande.ToString(DATE_ISO_FORMAT),
+                dateFinAbonnement = abonnement.DateFinAbonnement.ToString(DATE_ISO_FORMAT),
+                montant = abonnement.Montant,
+                nbExemplaire = 1,
+            };
+
+            string json = JsonConvert.SerializeObject(donnees, new CustomDateTimeConverter());
+            try
+            {
+                var result = TraitementRecup<Abonnement>(POST, "abonnement", PARAM_PREFIX + json);
+                return (result != null);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Échec création abonnement pour la revue : {0}", abonnement.IdRevue);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// Supprime un abonnement en fonction de son identifiant.
+        /// </summary>
+        /// <param name="idAbonnement">L'identifiant de l'abonnement à supprimer.</param>
+        /// <returns>True si la suppression a réussi, sinon false.</returns>
+        public bool SupprimerAbonnement(string idAbonnement)
+        {
+            string json = ConvertToJson("id", idAbonnement);
+            try
+            {
+                var result = TraitementRecup<Abonnement>(DELETE, "abonnement/" + json, null);
+                return (result != null);
+            }
+            catch (Exception ex)
+            {
+                logger.Error(ex, "Échec suppression abonnement : {0}", idAbonnement);
+                return false;
+            }
+        }
     }
 }

@@ -2,10 +2,7 @@
 using System.Windows.Forms;
 using MediaTekDocuments.model;
 using MediaTekDocuments.controller;
-using System.Collections.Generic;
-using System.Linq;
-using System.Drawing;
-using System.IO;
+using MediaTekDocuments.helper;
 
 namespace MediaTekDocuments.view
 
@@ -15,28 +12,56 @@ namespace MediaTekDocuments.view
     /// </summary>
     public partial class FrmMediatek : Form
     {
-        #region Commun
+        #region constantes de la classe
+
+        const string ETATNEUF = "00001";
+        private const string MessageInformation = "Information";
+
+        #endregion
+
+        #region bindingsource et données locales
+
+        // BindingSource pour centraliser la liaison des données pour chaque onglet.
+        private readonly BindingSource bindingSourceLivre = [];
+        private readonly BindingSource bindingSourceDvd = [];
+        private readonly BindingSource bindingSourceRevues = [];
+        private readonly BindingSource bindingSourceExemplaires = [];
+
+        // BindingSource spécifique à certaines catégories lors d'un tri.
+        private readonly BindingSource bindingSourceGenre = [];
+        private readonly BindingSource bindingSourcePublic = [];
+        private readonly BindingSource bindingSourceRayon = [];
+
+        // Copie en mémoire pour reset les listes originales après un trie ou un filtre.
+        private List<Livre> livresOriginaux = [];
+        private List<Dvd> dvdOriginaux = [];
+        private List<Revue> revuesOriginaux = [];
+        private List<Exemplaire> exemplairesOriginaux = [];
+
+        // Contrôleur du formulaire unique
         private readonly FrmMediatekController controller;
-        private readonly BindingSource bdgGenres = new BindingSource();
-        private readonly BindingSource bdgPublics = new BindingSource();
-        private readonly BindingSource bdgRayons = new BindingSource();
+
+        #endregion
+
+        #region Méthodes communes - centralisation logique
 
         /// <summary>
-        /// Constructeur : création du contrôleur lié à ce formulaire
+        /// Constructeur : création du contrôleur lié à ce formulaire.
         /// </summary>
         internal FrmMediatek()
         {
             InitializeComponent();
-                this.controller = new FrmMediatekController();
+            controller = new FrmMediatekController();
         }
 
         /// <summary>
-        /// Rempli un des 3 combo (genre, public, rayon)
+        /// Remplit un ComboBox (genre, public ou rayon) à partir d'une liste de catégories,
+        /// et réinitialise la sélection.
         /// </summary>
-        /// <param name="lesCategories">liste des objets de type Genre ou Public ou Rayon</param>
-        /// <param name="bdg">bindingsource contenant les informations</param>
-        /// <param name="cbx">combobox à remplir</param>
-        public void RemplirComboCategorie(List<Categorie> lesCategories, BindingSource bdg, ComboBox cbx)
+        /// <param name="lesCategories">Liste des catégories à afficher (Genre, Public ou Rayon).</param>
+        /// <param name="bdg">BindingSource utilisé pour gérer l’affichage des données.</param>
+        /// <param name="cbx">ComboBox à alimenter.</param>
+        public static void RemplirComboCategorie(List<Categorie> lesCategories, BindingSource bdg, ComboBox cbx)
         {
             bdg.DataSource = lesCategories;
             cbx.DataSource = bdg;
@@ -45,109 +70,138 @@ namespace MediaTekDocuments.view
                 cbx.SelectedIndex = -1;
             }
         }
-        #endregion
-
-        #region Onglet Livres
-        private readonly BindingSource bdgLivresListe = new BindingSource();
-        private List<Livre> lesLivres = new List<Livre>();
 
         /// <summary>
-        /// Ouverture de l'onglet Livres : 
-        /// appel des méthodes pour remplir le datagrid des livres et des combos (genre, rayon, public)
+        /// Filtre une liste d'objets en fonction d’une ComboBox de Categorie (Genre, Public ou Rayon),
+        /// vide les TextBox de recherche et réinitialise les autres ComboBox passées en paramètre.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
+        /// <typeparam name="T">Type des éléments de la liste (Livre, Dvd, Revue).</typeparam>
+        /// <param name="cb">Le ComboBox sur lequel on applique le filtre.</param>
+        /// <param name="listeAfiltrer">La liste complète des éléments à filtrer.</param>
+        /// <param name="categorieAFiltrer">Fonction qui renvoie la propriété de catégorie (l => l.Genre / l.Public / l.Rayon) qu'on va filtrer.</param>
+        /// <param name="remplirListe">Action qui remet la DataGridView à jour (RemplirLivresListe, RemplirDvdListe, etc.).</param>
+        /// <param name="txbTitreRecherche">Texbox qui contient le titre de la recherche.</param>
+        /// <param name="autresCbAReset">Les autres ComboBox à remettre à -1 lors du filtrage.</param>
+        private static void FiltrerParCategorie<T>(
+            ComboBox cb,
+            List<T> listeAfiltrer,
+            Func<T, string> categorieAFiltrer,
+            Action<List<T>> remplirListe,
+            TextBox txbTitreRecherche,
+            params ComboBox[] autresCbAReset
+        )
+        {
+            // Pattern‐matching gère le cast et la null‐safety sans le préciser autrement.
+            if (cb.SelectedItem is not Categorie categorie)
+                return;
+
+            txbTitreRecherche.Clear();
+
+            var listeFiltree = listeAfiltrer
+                .Where(x => !string.IsNullOrEmpty(categorieAFiltrer(x)) && string.Equals(categorieAFiltrer(x), categorie.Libelle, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+
+            // Mise à jour du DataGridView.
+            remplirListe(listeFiltree);
+
+            foreach (var autresCb in autresCbAReset)
+                autresCb.SelectedIndex = -1;
+        }
+
+        /// <summary>
+        /// Réinitialise les TextBox, ComboBox et PictureBox passés en paramètre.
+        /// C'est la méthode générale qui permet de réinitialiser des contrôles dans le formulaire.
+        /// </summary>
+        /// <param name="controles">Contrôles à vider ou réinitialiser.</param>
+        private static void ResetControles(params Control[] controles)
+        {
+            foreach (var controle in controles)
+            {
+                switch (controle)
+                {
+                    case ComboBox cb: cb.SelectedIndex = -1; break;
+                    case TextBox tb: tb.Clear(); break;
+                    case PictureBox pb:
+                        pb.Image?.Dispose();
+                        pb.Image = null;
+                        break;
+                }
+            }
+        }
+
+        #endregion
+
+        #region Onglet 1 — Livres
+
+        /// <summary>
+        /// Chargement initial de l'onglet Livres:
+        /// récupère les données depuis le contrôleur et initialise
+        /// le DataGridView ainsi que les ComboBox de filtres (genre, public, rayon).
+        /// </summary>
         private void TabLivres_Enter(object sender, EventArgs e)
         {
-            lesLivres = controller.GetAllLivres();
-            RemplirComboCategorie(controller.GetAllGenres(), bdgGenres, cbxLivresGenres);
-            RemplirComboCategorie(controller.GetAllPublics(), bdgPublics, cbxLivresPublics);
-            RemplirComboCategorie(controller.GetAllRayons(), bdgRayons, cbxLivresRayons);
+            livresOriginaux = controller.GetAllLivres();
+            RemplirComboCategorie(controller.GetAllGenres(), bindingSourceGenre, cbxLivresGenres);
+            RemplirComboCategorie(controller.GetAllPublics(), bindingSourcePublic, cbxLivresPublics);
+            RemplirComboCategorie(controller.GetAllRayons(), bindingSourceRayon, cbxLivresRayons);
             RemplirLivresListeComplete();
         }
 
         /// <summary>
-        /// Remplit le dategrid avec la liste reçue en paramètre
+        /// Remplit le DataGridView des livres avec la liste fournie,
+        /// configure le tri automatique sur les colonnes,
+        /// masque les colonnes techniques et ajuste l'affichage.
         /// </summary>
-        /// <param name="livres">liste de livres</param>
+        /// <param name="livres">Liste de livres à afficher.</param>
         private void RemplirLivresListe(List<Livre> livres)
         {
-            bdgLivresListe.DataSource = livres;
-            dgvLivresListe.DataSource = bdgLivresListe;
+            var sortableLivres = new SortableBindingList<Livre>(livres);
+            bindingSourceLivre.DataSource = sortableLivres;
+            dgvLivresListe.DataSource = bindingSourceLivre;
+
+            // Assurer le tri automatique pour chaque colonne.
+            foreach (DataGridViewColumn col in dgvLivresListe.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.Automatic;
+            }
+
             dgvLivresListe.Columns["isbn"].Visible = false;
             dgvLivresListe.Columns["idRayon"].Visible = false;
             dgvLivresListe.Columns["idGenre"].Visible = false;
             dgvLivresListe.Columns["idPublic"].Visible = false;
             dgvLivresListe.Columns["image"].Visible = false;
+
             dgvLivresListe.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+
             dgvLivresListe.Columns["id"].DisplayIndex = 0;
             dgvLivresListe.Columns["titre"].DisplayIndex = 1;
         }
 
         /// <summary>
-        /// Recherche et affichage du livre dont on a saisi le numéro.
-        /// Si non trouvé, affichage d'un MessageBox.
+        /// Filtre dynamiquement la liste des livres en fonction du texte saisi dans la zone de recherche
+        /// et met à jour le DataGridView associé.  
+        /// Réinitialise également les filtres de genre, public et rayon avant d’appliquer le filtre.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void BtnLivresNumRecherche_Click(object sender, EventArgs e)
-        {
-            if (!txbLivresNumRecherche.Text.Equals(""))
-            {
-                txbLivresTitreRecherche.Text = "";
-                cbxLivresGenres.SelectedIndex = -1;
-                cbxLivresRayons.SelectedIndex = -1;
-                cbxLivresPublics.SelectedIndex = -1;
-                Livre livre = lesLivres.Find(x => x.Id.Equals(txbLivresNumRecherche.Text));
-                if (livre != null)
-                {
-                    List<Livre> livres = new List<Livre>() { livre };
-                    RemplirLivresListe(livres);
-                }
-                else
-                {
-                    MessageBox.Show("numéro introuvable");
-                    RemplirLivresListeComplete();
-                }
-            }
-            else
-            {
-                RemplirLivresListeComplete();
-            }
-        }
-
-        /// <summary>
-        /// Recherche et affichage des livres dont le titre matche acec la saisie.
-        /// Cette procédure est exécutée à chaque ajout ou suppression de caractère
-        /// dans le textBox de saisie.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
+        /// <param name="sender">La TextBox de recherche dont le contenu a changé.</param>
+        /// <param name="e">Arguments de l’événement TextChanged.</param>
         private void TxbLivresTitreRecherche_TextChanged(object sender, EventArgs e)
         {
-            if (!txbLivresTitreRecherche.Text.Equals(""))
+            string texte = txbLivresTitreRecherche.Text.Trim();
+
+            if (string.IsNullOrEmpty(texte))
             {
-                cbxLivresGenres.SelectedIndex = -1;
-                cbxLivresRayons.SelectedIndex = -1;
-                cbxLivresPublics.SelectedIndex = -1;
-                txbLivresNumRecherche.Text = "";
-                List<Livre> lesLivresParTitre;
-                lesLivresParTitre = lesLivres.FindAll(x => x.Titre.ToLower().Contains(txbLivresTitreRecherche.Text.ToLower()));
-                RemplirLivresListe(lesLivresParTitre);
+                // Remet la liste complète si champ vide.
+                bindingSourceLivre.DataSource = new SortableBindingList<Livre>(livresOriginaux);
             }
             else
             {
-                // si la zone de saisie est vide et aucun élément combo sélectionné, réaffichage de la liste complète
-                if (cbxLivresGenres.SelectedIndex < 0 && cbxLivresPublics.SelectedIndex < 0 && cbxLivresRayons.SelectedIndex < 0
-                    && txbLivresNumRecherche.Text.Equals(""))
-                {
-                    RemplirLivresListeComplete();
-                }
+                ResetControles(cbxLivresGenres, cbxLivresPublics, cbxLivresRayons);
+                UIHelper.FiltrerBindingSource(bindingSourceLivre, txbLivresTitreRecherche, livresOriginaux, "Id", "Titre", "Auteur", "Genre", "Public", "Collection", "Rayon");
             }
         }
 
         /// <summary>
-        /// Affichage des informations du livre sélectionné
+        /// Affiche les informations du livre sélectionné.
         /// </summary>
         /// <param name="livre">le livre</param>
         private void AfficheLivresInfos(Livre livre)
@@ -173,107 +227,77 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Vide les zones d'affichage des informations du livre
+        /// Réinitialise les champs d'affichage des informations d'un livre,
+        /// en vidant les TextBox et en supprimant l'image affichée.
         /// </summary>
         private void VideLivresInfos()
         {
-            txbLivresAuteur.Text = "";
-            txbLivresCollection.Text = "";
-            txbLivresImage.Text = "";
-            txbLivresIsbn.Text = "";
-            txbLivresNumero.Text = "";
-            txbLivresGenre.Text = "";
-            txbLivresPublic.Text = "";
-            txbLivresRayon.Text = "";
-            txbLivresTitre.Text = "";
-            pcbLivresImage.Image = null;
+            ResetControles(
+                txbLivresAuteur,
+                txbLivresCollection,
+                txbLivresImage,
+                txbLivresIsbn,
+                txbLivresNumero,
+                txbLivresGenre,
+                txbLivresPublic,
+                txbLivresRayon,
+                txbLivresTitre,
+                pcbLivresImage
+            );
         }
 
         /// <summary>
-        /// Filtre sur le genre
+        /// Filtre la liste des livres par genre et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
         private void CbxLivresGenres_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxLivresGenres.SelectedIndex >= 0)
-            {
-                txbLivresTitreRecherche.Text = "";
-                txbLivresNumRecherche.Text = "";
-                Genre genre = (Genre)cbxLivresGenres.SelectedItem;
-                List<Livre> livres = lesLivres.FindAll(x => x.Genre.Equals(genre.Libelle));
-                RemplirLivresListe(livres);
-                cbxLivresRayons.SelectedIndex = -1;
-                cbxLivresPublics.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxLivresGenres, livresOriginaux, livre => livre.Genre, RemplirLivresListe, txbLivresTitreRecherche, cbxLivresPublics, cbxLivresRayons);
         }
 
         /// <summary>
-        /// Filtre sur la catégorie de public
+        /// Filtre la liste des livres par public et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
         private void CbxLivresPublics_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxLivresPublics.SelectedIndex >= 0)
-            {
-                txbLivresTitreRecherche.Text = "";
-                txbLivresNumRecherche.Text = "";
-                Public lePublic = (Public)cbxLivresPublics.SelectedItem;
-                List<Livre> livres = lesLivres.FindAll(x => x.Public.Equals(lePublic.Libelle));
-                RemplirLivresListe(livres);
-                cbxLivresRayons.SelectedIndex = -1;
-                cbxLivresGenres.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxLivresPublics, livresOriginaux, livre => livre.Public, RemplirLivresListe, txbLivresTitreRecherche, cbxLivresGenres, cbxLivresRayons);
         }
 
         /// <summary>
-        /// Filtre sur le rayon
+        /// Filtre la liste des livres par rayon et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
         private void CbxLivresRayons_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxLivresRayons.SelectedIndex >= 0)
-            {
-                txbLivresTitreRecherche.Text = "";
-                txbLivresNumRecherche.Text = "";
-                Rayon rayon = (Rayon)cbxLivresRayons.SelectedItem;
-                List<Livre> livres = lesLivres.FindAll(x => x.Rayon.Equals(rayon.Libelle));
-                RemplirLivresListe(livres);
-                cbxLivresGenres.SelectedIndex = -1;
-                cbxLivresPublics.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxLivresRayons, livresOriginaux, livre => livre.Rayon, RemplirLivresListe, txbLivresTitreRecherche, cbxLivresGenres, cbxLivresPublics);
         }
 
         /// <summary>
-        /// Sur la sélection d'une ligne ou cellule dans le grid
-        /// affichage des informations du livre
+        /// Gère la sélection d'un livre dans le DataGridView.
+        /// Si aucun livre n'est sélectionné, vide les zones d'affichage ; 
+        /// sinon, affiche les informations du livre sélectionné.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
         private void DgvLivresListe_SelectionChanged(object sender, EventArgs e)
         {
-            if (dgvLivresListe.CurrentCell != null)
-            {
-                try
-                {
-                    Livre livre = (Livre)bdgLivresListe.List[bdgLivresListe.Position];
-                    AfficheLivresInfos(livre);
-                }
-                catch
-                {
-                    VideLivresZones();
-                }
-            }
-            else
+            // Si l'élément courant lié au BindingSource n'est pas un Livre, l'affichage est vidé.
+            if (bindingSourceLivre.Current is not Livre livre)
             {
                 VideLivresInfos();
+                return;
             }
+
+            AfficheLivresInfos(livre);
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des livres
+        /// Réinitialise le filtre sur la catégorie public des livres et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -283,7 +307,7 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des livres
+        /// Réinitialise le filtre sur la catégorie rayon des livres et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -293,7 +317,7 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des livres
+        /// Réinitialise le filtre sur la catégorie genre des livres et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
@@ -304,160 +328,89 @@ namespace MediaTekDocuments.view
 
         /// <summary>
         /// Affichage de la liste complète des livres
-        /// et annulation de toutes les recherches et filtres
+        /// et annulation de toutes les recherches et filtres.
         /// </summary>
         private void RemplirLivresListeComplete()
         {
-            RemplirLivresListe(lesLivres);
+            RemplirLivresListe(livresOriginaux);
             VideLivresZones();
         }
 
         /// <summary>
-        /// vide les zones de recherche et de filtre
+        /// Vide les zones d'affichage des informations du livre sélectionné.
         /// </summary>
         private void VideLivresZones()
         {
-            cbxLivresGenres.SelectedIndex = -1;
-            cbxLivresRayons.SelectedIndex = -1;
-            cbxLivresPublics.SelectedIndex = -1;
-            txbLivresNumRecherche.Text = "";
-            txbLivresTitreRecherche.Text = "";
+            ResetControles(cbxLivresGenres, cbxLivresPublics, cbxLivresRayons, txbLivresTitreRecherche);
         }
 
-        /// <summary>
-        /// Tri sur les colonnes
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void DgvLivresListe_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-        {
-            VideLivresZones();
-            string titreColonne = dgvLivresListe.Columns[e.ColumnIndex].HeaderText;
-            List<Livre> sortedList = new List<Livre>();
-            switch (titreColonne)
-            {
-                case "Id":
-                    sortedList = lesLivres.OrderBy(o => o.Id).ToList();
-                    break;
-                case "Titre":
-                    sortedList = lesLivres.OrderBy(o => o.Titre).ToList();
-                    break;
-                case "Collection":
-                    sortedList = lesLivres.OrderBy(o => o.Collection).ToList();
-                    break;
-                case "Auteur":
-                    sortedList = lesLivres.OrderBy(o => o.Auteur).ToList();
-                    break;
-                case "Genre":
-                    sortedList = lesLivres.OrderBy(o => o.Genre).ToList();
-                    break;
-                case "Public":
-                    sortedList = lesLivres.OrderBy(o => o.Public).ToList();
-                    break;
-                case "Rayon":
-                    sortedList = lesLivres.OrderBy(o => o.Rayon).ToList();
-                    break;
-            }
-            RemplirLivresListe(sortedList);
-        }
         #endregion
 
-        #region Onglet Dvd
-        private readonly BindingSource bdgDvdListe = new BindingSource();
-        private List<Dvd> lesDvd = new List<Dvd>();
+        #region Onglet 2 — Dvd
 
         /// <summary>
-        /// Ouverture de l'onglet Dvds : 
-        /// appel des méthodes pour remplir le datagrid des dvd et des combos (genre, rayon, public)
+        /// Chargement initial de l'onglet DVD :
+        /// récupère les données depuis le contrôleur et initialise
+        /// le DataGridView ainsi que les ComboBox de filtres (genre, public, rayon).
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void tabDvd_Enter(object sender, EventArgs e)
+        private void TabDvd_Enter(object sender, EventArgs e)
         {
-            lesDvd = controller.GetAllDvd();
-            RemplirComboCategorie(controller.GetAllGenres(), bdgGenres, cbxDvdGenres);
-            RemplirComboCategorie(controller.GetAllPublics(), bdgPublics, cbxDvdPublics);
-            RemplirComboCategorie(controller.GetAllRayons(), bdgRayons, cbxDvdRayons);
+            dvdOriginaux = controller.GetAllDvd();
+            RemplirComboCategorie(controller.GetAllGenres(), bindingSourceGenre, cbxDvdGenres);
+            RemplirComboCategorie(controller.GetAllPublics(), bindingSourcePublic, cbxDvdPublics);
+            RemplirComboCategorie(controller.GetAllRayons(), bindingSourceRayon, cbxDvdRayons);
             RemplirDvdListeComplete();
         }
 
         /// <summary>
-        /// Remplit le dategrid avec la liste reçue en paramètre
+        /// Remplit le DataGridView des DVD avec la liste fournie,
+        /// configure le tri automatique sur les colonnes,
+        /// masque les colonnes techniques et ajuste l'affichage.
         /// </summary>
-        /// <param name="Dvds">liste de dvd</param>
+        /// <param name="livres">Liste de DVD à afficher.</param>
         private void RemplirDvdListe(List<Dvd> Dvds)
         {
-            bdgDvdListe.DataSource = Dvds;
-            dgvDvdListe.DataSource = bdgDvdListe;
+            var sortableDvd = new SortableBindingList<Dvd>(Dvds);
+            bindingSourceDvd.DataSource = sortableDvd;
+            dgvDvdListe.DataSource = bindingSourceDvd;
+
+            foreach (DataGridViewColumn col in dgvDvdListe.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.Automatic;
+            }
+
             dgvDvdListe.Columns["idRayon"].Visible = false;
             dgvDvdListe.Columns["idGenre"].Visible = false;
             dgvDvdListe.Columns["idPublic"].Visible = false;
             dgvDvdListe.Columns["image"].Visible = false;
             dgvDvdListe.Columns["synopsis"].Visible = false;
+
             dgvDvdListe.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+
             dgvDvdListe.Columns["id"].DisplayIndex = 0;
             dgvDvdListe.Columns["titre"].DisplayIndex = 1;
         }
 
         /// <summary>
-        /// Recherche et affichage du Dvd dont on a saisi le numéro.
-        /// Si non trouvé, affichage d'un MessageBox.
+        /// Filtre dynamiquement la liste des DVD en fonction du texte saisi dans la zone de recherche
+        /// et met à jour le DataGridView associé.  
+        /// Réinitialise également les filtres de genre, public et rayon avant d’appliquer le filtre.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void btnDvdNumRecherche_Click(object sender, EventArgs e)
+        /// <param name="sender">La TextBox de recherche dont le contenu a changé.</param>
+        /// <param name="e">Arguments de l’événement TextChanged.</param>
+        private void TxbDvdTitreRecherche_TextChanged(object sender, EventArgs e)
         {
-            if (!txbDvdNumRecherche.Text.Equals(""))
-            {
-                txbDvdTitreRecherche.Text = "";
-                cbxDvdGenres.SelectedIndex = -1;
-                cbxDvdRayons.SelectedIndex = -1;
-                cbxDvdPublics.SelectedIndex = -1;
-                Dvd dvd = lesDvd.Find(x => x.Id.Equals(txbDvdNumRecherche.Text));
-                if (dvd != null)
-                {
-                    List<Dvd> Dvd = new List<Dvd>() { dvd };
-                    RemplirDvdListe(Dvd);
-                }
-                else
-                {
-                    MessageBox.Show("numéro introuvable");
-                    RemplirDvdListeComplete();
-                }
-            }
-            else
-            {
-                RemplirDvdListeComplete();
-            }
-        }
+            string texte = txbDvdTitreRecherche.Text.Trim();
 
-        /// <summary>
-        /// Recherche et affichage des Dvd dont le titre matche acec la saisie.
-        /// Cette procédure est exécutée à chaque ajout ou suppression de caractère
-        /// dans le textBox de saisie.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void txbDvdTitreRecherche_TextChanged(object sender, EventArgs e)
-        {
-            if (!txbDvdTitreRecherche.Text.Equals(""))
+            if (string.IsNullOrEmpty(texte))
             {
-                cbxDvdGenres.SelectedIndex = -1;
-                cbxDvdRayons.SelectedIndex = -1;
-                cbxDvdPublics.SelectedIndex = -1;
-                txbDvdNumRecherche.Text = "";
-                List<Dvd> lesDvdParTitre;
-                lesDvdParTitre = lesDvd.FindAll(x => x.Titre.ToLower().Contains(txbDvdTitreRecherche.Text.ToLower()));
-                RemplirDvdListe(lesDvdParTitre);
+                // Remet la liste complète si champ vide.
+                bindingSourceDvd.DataSource = new SortableBindingList<Dvd>(dvdOriginaux);
             }
             else
             {
-                // si la zone de saisie est vide et aucun élément combo sélectionné, réaffichage de la liste complète
-                if (cbxDvdGenres.SelectedIndex < 0 && cbxDvdPublics.SelectedIndex < 0 && cbxDvdRayons.SelectedIndex < 0
-                    && txbDvdNumRecherche.Text.Equals(""))
-                {
-                    RemplirDvdListeComplete();
-                }
+                ResetControles(cbxDvdGenres, cbxDvdPublics, cbxDvdRayons);
+                UIHelper.FiltrerBindingSource(bindingSourceDvd, txbDvdTitreRecherche, dvdOriginaux, "Id", "Titre", "Realisateur", "Genre", "Public", "Rayon", "Duree");
             }
         }
 
@@ -488,295 +441,196 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Vide les zones d'affichage des informations du dvd
+        /// Réinitialise les champs d'affichage des informations d'un DVD,
+        /// en vidant les TextBox et en supprimant l'image affichée.
         /// </summary>
         private void VideDvdInfos()
         {
-            txbDvdRealisateur.Text = "";
-            txbDvdSynopsis.Text = "";
-            txbDvdImage.Text = "";
-            txbDvdDuree.Text = "";
-            txbDvdNumero.Text = "";
-            txbDvdGenre.Text = "";
-            txbDvdPublic.Text = "";
-            txbDvdRayon.Text = "";
-            txbDvdTitre.Text = "";
-            pcbDvdImage.Image = null;
+            ResetControles(
+                txbDvdRealisateur,
+                txbDvdSynopsis,
+                txbDvdImage,
+                txbDvdDuree,
+                txbDvdNumero,
+                txbDvdGenre,
+                txbDvdPublic,
+                txbDvdRayon,
+                txbDvdTitre,
+                pcbDvdImage
+            );
         }
 
         /// <summary>
-        /// Filtre sur le genre
+        /// Filtre la liste des DVD par genre et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void cbxDvdGenres_SelectedIndexChanged(object sender, EventArgs e)
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
+        private void CbxDvdGenres_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxDvdGenres.SelectedIndex >= 0)
-            {
-                txbDvdTitreRecherche.Text = "";
-                txbDvdNumRecherche.Text = "";
-                Genre genre = (Genre)cbxDvdGenres.SelectedItem;
-                List<Dvd> Dvd = lesDvd.FindAll(x => x.Genre.Equals(genre.Libelle));
-                RemplirDvdListe(Dvd);
-                cbxDvdRayons.SelectedIndex = -1;
-                cbxDvdPublics.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxDvdGenres, dvdOriginaux, dvd => dvd.Genre, RemplirDvdListe, txbDvdTitreRecherche, cbxDvdPublics, cbxDvdRayons);
         }
 
         /// <summary>
-        /// Filtre sur la catégorie de public
+        /// Filtre la liste des DVD par public et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void cbxDvdPublics_SelectedIndexChanged(object sender, EventArgs e)
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
+        private void CbxDvdPublics_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxDvdPublics.SelectedIndex >= 0)
-            {
-                txbDvdTitreRecherche.Text = "";
-                txbDvdNumRecherche.Text = "";
-                Public lePublic = (Public)cbxDvdPublics.SelectedItem;
-                List<Dvd> Dvd = lesDvd.FindAll(x => x.Public.Equals(lePublic.Libelle));
-                RemplirDvdListe(Dvd);
-                cbxDvdRayons.SelectedIndex = -1;
-                cbxDvdGenres.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxDvdPublics, dvdOriginaux, dvd => dvd.Public, RemplirDvdListe, txbDvdTitreRecherche, cbxDvdGenres, cbxDvdRayons);
         }
 
         /// <summary>
-        /// Filtre sur le rayon
+        /// Filtre la liste des DVD par rayon et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void cbxDvdRayons_SelectedIndexChanged(object sender, EventArgs e)
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
+        private void CbxDvdRayons_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxDvdRayons.SelectedIndex >= 0)
-            {
-                txbDvdTitreRecherche.Text = "";
-                txbDvdNumRecherche.Text = "";
-                Rayon rayon = (Rayon)cbxDvdRayons.SelectedItem;
-                List<Dvd> Dvd = lesDvd.FindAll(x => x.Rayon.Equals(rayon.Libelle));
-                RemplirDvdListe(Dvd);
-                cbxDvdGenres.SelectedIndex = -1;
-                cbxDvdPublics.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxDvdRayons, dvdOriginaux, dvd => dvd.Rayon, RemplirDvdListe, txbDvdTitreRecherche, cbxDvdGenres, cbxDvdPublics);
         }
 
         /// <summary>
-        /// Sur la sélection d'une ligne ou cellule dans le grid
-        /// affichage des informations du dvd
+        /// Gère la sélection d'un dvd dans le DataGridView.
+        /// Si aucun dvd n'est sélectionné, vide les zones d'affichage ; 
+        /// sinon, affiche les informations du dvd sélectionné.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void dgvDvdListe_SelectionChanged(object sender, EventArgs e)
+        private void DgvDvdListe_SelectionChanged(object sender, EventArgs e)
         {
-            if (dgvDvdListe.CurrentCell != null)
-            {
-                try
-                {
-                    Dvd dvd = (Dvd)bdgDvdListe.List[bdgDvdListe.Position];
-                    AfficheDvdInfos(dvd);
-                }
-                catch
-                {
-                    VideDvdZones();
-                }
-            }
-            else
+            if (bindingSourceDvd.Current is not Dvd dvd)
             {
                 VideDvdInfos();
+                return;
             }
+
+            AfficheDvdInfos(dvd);
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des Dvd
+        /// Réinitialise le filtre sur la catégorie public des DVD et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnDvdAnnulPublics_Click(object sender, EventArgs e)
+        private void BtnDvdAnnulPublics_Click(object sender, EventArgs e)
         {
             RemplirDvdListeComplete();
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des Dvd
+        /// Réinitialise le filtre sur la catégorie rayon des DVD et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnDvdAnnulRayons_Click(object sender, EventArgs e)
+        private void BtnDvdAnnulRayons_Click(object sender, EventArgs e)
         {
             RemplirDvdListeComplete();
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des Dvd
+        /// Réinitialise le filtre sur la catégorie genre des DVD et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnDvdAnnulGenres_Click(object sender, EventArgs e)
+        private void BtnDvdAnnulGenres_Click(object sender, EventArgs e)
         {
             RemplirDvdListeComplete();
         }
 
         /// <summary>
         /// Affichage de la liste complète des Dvd
-        /// et annulation de toutes les recherches et filtres
+        /// et annulation de toutes les recherches et filtres.
         /// </summary>
         private void RemplirDvdListeComplete()
         {
-            RemplirDvdListe(lesDvd);
+            RemplirDvdListe(dvdOriginaux);
             VideDvdZones();
         }
 
         /// <summary>
-        /// vide les zones de recherche et de filtre
+        /// Vide les zones de recherche et de filtre des DVD.
         /// </summary>
         private void VideDvdZones()
         {
-            cbxDvdGenres.SelectedIndex = -1;
-            cbxDvdRayons.SelectedIndex = -1;
-            cbxDvdPublics.SelectedIndex = -1;
-            txbDvdNumRecherche.Text = "";
-            txbDvdTitreRecherche.Text = "";
-        }
-
-        /// <summary>
-        /// Tri sur les colonnes
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void dgvDvdListe_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-        {
-            VideDvdZones();
-            string titreColonne = dgvDvdListe.Columns[e.ColumnIndex].HeaderText;
-            List<Dvd> sortedList = new List<Dvd>();
-            switch (titreColonne)
-            {
-                case "Id":
-                    sortedList = lesDvd.OrderBy(o => o.Id).ToList();
-                    break;
-                case "Titre":
-                    sortedList = lesDvd.OrderBy(o => o.Titre).ToList();
-                    break;
-                case "Duree":
-                    sortedList = lesDvd.OrderBy(o => o.Duree).ToList();
-                    break;
-                case "Realisateur":
-                    sortedList = lesDvd.OrderBy(o => o.Realisateur).ToList();
-                    break;
-                case "Genre":
-                    sortedList = lesDvd.OrderBy(o => o.Genre).ToList();
-                    break;
-                case "Public":
-                    sortedList = lesDvd.OrderBy(o => o.Public).ToList();
-                    break;
-                case "Rayon":
-                    sortedList = lesDvd.OrderBy(o => o.Rayon).ToList();
-                    break;
-            }
-            RemplirDvdListe(sortedList);
+            ResetControles(cbxDvdGenres, cbxDvdRayons, cbxDvdPublics, txbDvdTitreRecherche);
         }
         #endregion
 
-        #region Onglet Revues
-        private readonly BindingSource bdgRevuesListe = new BindingSource();
-        private List<Revue> lesRevues = new List<Revue>();
+        #region Onglet 3 - Revues
 
         /// <summary>
-        /// Ouverture de l'onglet Revues : 
-        /// appel des méthodes pour remplir le datagrid des revues et des combos (genre, rayon, public)
+        /// Chargement initial de l'onglet revues :
+        /// récupère les données depuis le contrôleur et initialise
+        /// le DataGridView ainsi que les ComboBox de filtres (genre, public, rayon).
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void tabRevues_Enter(object sender, EventArgs e)
+        private void TabRevues_Enter(object sender, EventArgs e)
         {
-            lesRevues = controller.GetAllRevues();
-            RemplirComboCategorie(controller.GetAllGenres(), bdgGenres, cbxRevuesGenres);
-            RemplirComboCategorie(controller.GetAllPublics(), bdgPublics, cbxRevuesPublics);
-            RemplirComboCategorie(controller.GetAllRayons(), bdgRayons, cbxRevuesRayons);
+            revuesOriginaux = controller.GetAllRevues();
+            RemplirComboCategorie(controller.GetAllGenres(), bindingSourceGenre, cbxRevuesGenres);
+            RemplirComboCategorie(controller.GetAllPublics(), bindingSourcePublic, cbxRevuesPublics);
+            RemplirComboCategorie(controller.GetAllRayons(), bindingSourceRayon, cbxRevuesRayons);
             RemplirRevuesListeComplete();
         }
 
         /// <summary>
-        /// Remplit le dategrid avec la liste reçue en paramètre
+        /// Remplit le DataGridView des revues avec la liste fournie,
+        /// configure le tri automatique sur les colonnes,
+        /// masque les colonnes techniques et ajuste l'affichage.
         /// </summary>
-        /// <param name="revues"></param>
+        /// <param name="livres">Liste des revues à afficher.</param>
         private void RemplirRevuesListe(List<Revue> revues)
         {
-            bdgRevuesListe.DataSource = revues;
-            dgvRevuesListe.DataSource = bdgRevuesListe;
+
+            var sortableRevues = new SortableBindingList<Revue>(revues);
+            bindingSourceRevues.DataSource = sortableRevues;
+            dgvRevuesListe.DataSource = bindingSourceRevues;
+
+            // Assurer le tri automatique pour chaque colonne.
+            foreach (DataGridViewColumn col in dgvRevuesListe.Columns)
+            {
+                col.SortMode = DataGridViewColumnSortMode.Automatic;
+            }
+
             dgvRevuesListe.Columns["idRayon"].Visible = false;
             dgvRevuesListe.Columns["idGenre"].Visible = false;
             dgvRevuesListe.Columns["idPublic"].Visible = false;
             dgvRevuesListe.Columns["image"].Visible = false;
+
             dgvRevuesListe.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+
             dgvRevuesListe.Columns["id"].DisplayIndex = 0;
             dgvRevuesListe.Columns["titre"].DisplayIndex = 1;
         }
 
         /// <summary>
-        /// Recherche et affichage de la revue dont on a saisi le numéro.
-        /// Si non trouvé, affichage d'un MessageBox.
+        /// Filtre dynamiquement la liste des revues en fonction du texte saisi dans la zone de recherche
+        /// et met à jour le DataGridView associé.  
+        /// Réinitialise également les filtres de genre, public et rayon avant d’appliquer le filtre.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void btnRevuesNumRecherche_Click(object sender, EventArgs e)
+        /// <param name="sender">La TextBox de recherche dont le contenu a changé.</param>
+        /// <param name="e">Arguments de l’événement TextChanged.</param>
+        private void TxbRevuesTitreRecherche_TextChanged(object sender, EventArgs e)
         {
-            if (!txbRevuesNumRecherche.Text.Equals(""))
+            string texte = txbRevuesTitreRecherche.Text.Trim();
+
+            if (string.IsNullOrEmpty(texte))
             {
-                txbRevuesTitreRecherche.Text = "";
-                cbxRevuesGenres.SelectedIndex = -1;
-                cbxRevuesRayons.SelectedIndex = -1;
-                cbxRevuesPublics.SelectedIndex = -1;
-                Revue revue = lesRevues.Find(x => x.Id.Equals(txbRevuesNumRecherche.Text));
-                if (revue != null)
-                {
-                    List<Revue> revues = new List<Revue>() { revue };
-                    RemplirRevuesListe(revues);
-                }
-                else
-                {
-                    MessageBox.Show("numéro introuvable");
-                    RemplirRevuesListeComplete();
-                }
+                // Remet la liste complète si champ vide.
+                bindingSourceRevues.DataSource = new SortableBindingList<Revue>(revuesOriginaux);
             }
             else
             {
-                RemplirRevuesListeComplete();
+                ResetControles(cbxRevuesGenres, cbxRevuesPublics, cbxRevuesRayons);
+                UIHelper.FiltrerBindingSource(bindingSourceRevues, txbRevuesTitreRecherche, revuesOriginaux, "Id", "Titre", "Periodicite", "DelaiMiseADispo", "Public", "Rayon", "Genre");
             }
         }
 
         /// <summary>
-        /// Recherche et affichage des revues dont le titre matche acec la saisie.
-        /// Cette procédure est exécutée à chaque ajout ou suppression de caractère
-        /// dans le textBox de saisie.
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void txbRevuesTitreRecherche_TextChanged(object sender, EventArgs e)
-        {
-            if (!txbRevuesTitreRecherche.Text.Equals(""))
-            {
-                cbxRevuesGenres.SelectedIndex = -1;
-                cbxRevuesRayons.SelectedIndex = -1;
-                cbxRevuesPublics.SelectedIndex = -1;
-                txbRevuesNumRecherche.Text = "";
-                List<Revue> lesRevuesParTitre;
-                lesRevuesParTitre = lesRevues.FindAll(x => x.Titre.ToLower().Contains(txbRevuesTitreRecherche.Text.ToLower()));
-                RemplirRevuesListe(lesRevuesParTitre);
-            }
-            else
-            {
-                // si la zone de saisie est vide et aucun élément combo sélectionné, réaffichage de la liste complète
-                if (cbxRevuesGenres.SelectedIndex < 0 && cbxRevuesPublics.SelectedIndex < 0 && cbxRevuesRayons.SelectedIndex < 0
-                    && txbRevuesNumRecherche.Text.Equals(""))
-                {
-                    RemplirRevuesListeComplete();
-                }
-            }
-        }
-
-        /// <summary>
-        /// Affichage des informations de la revue sélectionné
+        /// Affichage les informations de la revue sélectionnée.
         /// </summary>
         /// <param name="revue">la revue</param>
         private void AfficheRevuesInfos(Revue revue)
@@ -801,275 +655,216 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Vide les zones d'affichage des informations de la reuve
+        /// Réinitialise les champs d'affichage des informations d'une revue,
+        /// en vidant les TextBox et en supprimant l'image affichée.
         /// </summary>
         private void VideRevuesInfos()
         {
-            txbRevuesPeriodicite.Text = "";
-            txbRevuesImage.Text = "";
-            txbRevuesDateMiseADispo.Text = "";
-            txbRevuesNumero.Text = "";
-            txbRevuesGenre.Text = "";
-            txbRevuesPublic.Text = "";
-            txbRevuesRayon.Text = "";
-            txbRevuesTitre.Text = "";
-            pcbRevuesImage.Image = null;
+            ResetControles(
+                txbRevuesPeriodicite,
+                txbRevuesImage,
+                txbRevuesNumero,
+                txbRevuesGenre,
+                txbRevuesPublic,
+                txbRevuesRayon,
+                txbRevuesTitre,
+                txbRevuesDateMiseADispo,
+                pcbRevuesImage
+            );
         }
 
         /// <summary>
-        /// Filtre sur le genre
+        /// Filtre la liste des revues par genre et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void cbxRevuesGenres_SelectedIndexChanged(object sender, EventArgs e)
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
+        private void CbxRevuesGenres_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxRevuesGenres.SelectedIndex >= 0)
-            {
-                txbRevuesTitreRecherche.Text = "";
-                txbRevuesNumRecherche.Text = "";
-                Genre genre = (Genre)cbxRevuesGenres.SelectedItem;
-                List<Revue> revues = lesRevues.FindAll(x => x.Genre.Equals(genre.Libelle));
-                RemplirRevuesListe(revues);
-                cbxRevuesRayons.SelectedIndex = -1;
-                cbxRevuesPublics.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxRevuesGenres, revuesOriginaux, revue => revue.Genre, RemplirRevuesListe, txbRevuesTitreRecherche, cbxRevuesPublics, cbxRevuesRayons);
         }
 
         /// <summary>
-        /// Filtre sur la catégorie de public
+        /// Filtre la liste des revues par public et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void cbxRevuesPublics_SelectedIndexChanged(object sender, EventArgs e)
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
+        private void CbxRevuesPublics_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxRevuesPublics.SelectedIndex >= 0)
-            {
-                txbRevuesTitreRecherche.Text = "";
-                txbRevuesNumRecherche.Text = "";
-                Public lePublic = (Public)cbxRevuesPublics.SelectedItem;
-                List<Revue> revues = lesRevues.FindAll(x => x.Public.Equals(lePublic.Libelle));
-                RemplirRevuesListe(revues);
-                cbxRevuesRayons.SelectedIndex = -1;
-                cbxRevuesGenres.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxRevuesPublics, revuesOriginaux, revue => revue.Public, RemplirRevuesListe, txbRevuesTitreRecherche, cbxRevuesGenres, cbxRevuesRayons);
         }
 
         /// <summary>
-        /// Filtre sur le rayon
+        /// Filtre la liste des revues par rayon et met à jour le DataGridView
+        /// en utilisant <see cref="FiltrerParCategorie{T}(ComboBox,List{T},Func{T,string},Action{List{T}},TextBox,ComboBox[])"/>.
         /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void cbxRevuesRayons_SelectedIndexChanged(object sender, EventArgs e)
+        /// <param name="sender">Le ComboBox déclencheur.</param>
+        /// <param name="e">Les arguments de l'événement.</param>
+        private void CbxRevuesRayons_SelectedIndexChanged(object sender, EventArgs e)
         {
-            if (cbxRevuesRayons.SelectedIndex >= 0)
-            {
-                txbRevuesTitreRecherche.Text = "";
-                txbRevuesNumRecherche.Text = "";
-                Rayon rayon = (Rayon)cbxRevuesRayons.SelectedItem;
-                List<Revue> revues = lesRevues.FindAll(x => x.Rayon.Equals(rayon.Libelle));
-                RemplirRevuesListe(revues);
-                cbxRevuesGenres.SelectedIndex = -1;
-                cbxRevuesPublics.SelectedIndex = -1;
-            }
+            FiltrerParCategorie(cbxRevuesRayons, revuesOriginaux, revue => revue.Rayon, RemplirRevuesListe, txbRevuesTitreRecherche, cbxRevuesGenres, cbxRevuesPublics);
         }
 
         /// <summary>
-        /// Sur la sélection d'une ligne ou cellule dans le grid
-        /// affichage des informations de la revue
+        /// Gère la sélection d'une revue dans le DataGridView.
+        /// Si aucune revue n'est sélectionné, vide les zones d'affichage ; 
+        /// sinon, affiche les informations de la revue sélectionné.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void dgvRevuesListe_SelectionChanged(object sender, EventArgs e)
+        private void DgvRevuesListe_SelectionChanged(object sender, EventArgs e)
         {
-            if (dgvRevuesListe.CurrentCell != null)
-            {
-                try
-                {
-                    Revue revue = (Revue)bdgRevuesListe.List[bdgRevuesListe.Position];
-                    AfficheRevuesInfos(revue);
-                }
-                catch
-                {
-                    VideRevuesZones();
-                }
-            }
-            else
+            if (bindingSourceRevues.Current is not Revue revue)
             {
                 VideRevuesInfos();
+                return;
             }
+
+            AfficheRevuesInfos(revue);
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des revues
+        /// Réinitialise le filtre sur la catégorie public des revues et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnRevuesAnnulPublics_Click(object sender, EventArgs e)
+        private void BtnRevuesAnnulPublics_Click(object sender, EventArgs e)
         {
             RemplirRevuesListeComplete();
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des revues
+        /// Réinitialise le filtre sur la catégorie rayon des revues et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnRevuesAnnulRayons_Click(object sender, EventArgs e)
+        private void BtnRevuesAnnulRayons_Click(object sender, EventArgs e)
         {
             RemplirRevuesListeComplete();
         }
 
         /// <summary>
-        /// Sur le clic du bouton d'annulation, affichage de la liste complète des revues
+        /// Réinitialise le filtre sur la catégorie genre des revues et recharge la liste complète.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnRevuesAnnulGenres_Click(object sender, EventArgs e)
+        private void BtnRevuesAnnulGenres_Click(object sender, EventArgs e)
         {
             RemplirRevuesListeComplete();
         }
 
         /// <summary>
         /// Affichage de la liste complète des revues
-        /// et annulation de toutes les recherches et filtres
+        /// et annulation de toutes les recherches et filtres.
         /// </summary>
         private void RemplirRevuesListeComplete()
         {
-            RemplirRevuesListe(lesRevues);
+            RemplirRevuesListe(revuesOriginaux);
             VideRevuesZones();
         }
 
         /// <summary>
-        /// vide les zones de recherche et de filtre
+        /// Vide les zones de recherche et de filtre des revues.
         /// </summary>
         private void VideRevuesZones()
         {
-            cbxRevuesGenres.SelectedIndex = -1;
-            cbxRevuesRayons.SelectedIndex = -1;
-            cbxRevuesPublics.SelectedIndex = -1;
-            txbRevuesNumRecherche.Text = "";
-            txbRevuesTitreRecherche.Text = "";
+            ResetControles(cbxRevuesGenres, cbxRevuesPublics, cbxRevuesRayons, txbRevuesTitreRecherche);
         }
 
-        /// <summary>
-        /// Tri sur les colonnes
-        /// </summary>
-        /// <param name="sender"></param>
-        /// <param name="e"></param>
-        private void dgvRevuesListe_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
-        {
-            VideRevuesZones();
-            string titreColonne = dgvRevuesListe.Columns[e.ColumnIndex].HeaderText;
-            List<Revue> sortedList = new List<Revue>();
-            switch (titreColonne)
-            {
-                case "Id":
-                    sortedList = lesRevues.OrderBy(o => o.Id).ToList();
-                    break;
-                case "Titre":
-                    sortedList = lesRevues.OrderBy(o => o.Titre).ToList();
-                    break;
-                case "Periodicite":
-                    sortedList = lesRevues.OrderBy(o => o.Periodicite).ToList();
-                    break;
-                case "DelaiMiseADispo":
-                    sortedList = lesRevues.OrderBy(o => o.DelaiMiseADispo).ToList();
-                    break;
-                case "Genre":
-                    sortedList = lesRevues.OrderBy(o => o.Genre).ToList();
-                    break;
-                case "Public":
-                    sortedList = lesRevues.OrderBy(o => o.Public).ToList();
-                    break;
-                case "Rayon":
-                    sortedList = lesRevues.OrderBy(o => o.Rayon).ToList();
-                    break;
-            }
-            RemplirRevuesListe(sortedList);
-        }
         #endregion
 
-        #region Onglet Paarutions
-        private readonly BindingSource bdgExemplairesListe = new BindingSource();
-        private List<Exemplaire> lesExemplaires = new List<Exemplaire>();
-        const string ETATNEUF = "00001";
+        #region Onglet 4 - Parutions
 
         /// <summary>
-        /// Ouverture de l'onglet : récupère le revues et vide tous les champs.
+        /// Chargement initial de l'onglet reception revue :
+        /// récupère les données depuis le contrôleur.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void tabReceptionRevue_Enter(object sender, EventArgs e)
+        private void TabReceptionRevue_Enter(object sender, EventArgs e)
         {
-            lesRevues = controller.GetAllRevues();
-            txbReceptionRevueNumero.Text = "";
+            revuesOriginaux = controller.GetAllRevues();
+            ResetControles(txbReceptionRevueNumero);
         }
 
         /// <summary>
-        /// Remplit le dategrid des exemplaires avec la liste reçue en paramètre
+        /// Remplit le DataGridView des exemplaires avec la liste fournie,
+        /// masque les colonnes techniques et ajuste l'affichage.
         /// </summary>
-        /// <param name="exemplaires">liste d'exemplaires</param>
-        private void RemplirReceptionExemplairesListe(List<Exemplaire> exemplaires)
+        /// <param name="livres">Liste des exemplaires à afficher.</param>
+        private void RemplirReceptionExemplairesListe(List<Exemplaire>? exemplaires)
         {
             if (exemplaires != null)
             {
-                bdgExemplairesListe.DataSource = exemplaires;
-                dgvReceptionExemplairesListe.DataSource = bdgExemplairesListe;
+                bindingSourceExemplaires.DataSource = exemplaires;
+                dgvReceptionExemplairesListe.DataSource = bindingSourceExemplaires;
+
                 dgvReceptionExemplairesListe.Columns["idEtat"].Visible = false;
                 dgvReceptionExemplairesListe.Columns["id"].Visible = false;
+
                 dgvReceptionExemplairesListe.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.AllCells;
+
                 dgvReceptionExemplairesListe.Columns["numero"].DisplayIndex = 0;
                 dgvReceptionExemplairesListe.Columns["dateAchat"].DisplayIndex = 1;
             }
             else
             {
-                bdgExemplairesListe.DataSource = null;
+                bindingSourceExemplaires.DataSource = null;
             }
         }
 
         /// <summary>
-        /// Recherche d'un numéro de revue et affiche ses informations
+        /// Recherche d'un numéro de revue et affiche ses informations.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnReceptionRechercher_Click(object sender, EventArgs e)
+        private void BtnReceptionRechercher_Click(object sender, EventArgs e)
         {
-            if (!txbReceptionRevueNumero.Text.Equals(""))
+            string numeroRecherche = txbReceptionRevueNumero.Text;
+
+            if (string.IsNullOrWhiteSpace(numeroRecherche))
             {
-                Revue revue = lesRevues.Find(x => x.Id.Equals(txbReceptionRevueNumero.Text));
-                if (revue != null)
-                {
-                    AfficheReceptionRevueInfos(revue);
-                }
-                else
-                {
-                    MessageBox.Show("numéro introuvable");
-                }
+                MessageBox.Show("Veuillez saisir un numéro de revue.", MessageInformation, MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            var revue = revuesOriginaux.Find(x => string.Equals(x.Id, numeroRecherche, StringComparison.Ordinal));
+
+            if (revue is not null)
+            {
+                AfficheReceptionRevueInfos(revue);
+            }
+            else
+            {
+                MessageBox.Show($"Le numéro '{numeroRecherche}' est introuvable.", MessageInformation, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
         }
 
         /// <summary>
         /// Si le numéro de revue est modifié, la zone de l'exemplaire est vidée et inactive
-        /// les informations de la revue son aussi effacées
+        /// les informations de la revue son aussi effacées.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void txbReceptionRevueNumero_TextChanged(object sender, EventArgs e)
+        private void TxbReceptionRevueNumero_TextChanged(object sender, EventArgs e)
         {
-            txbReceptionRevuePeriodicite.Text = "";
-            txbReceptionRevueImage.Text = "";
-            txbReceptionRevueDelaiMiseADispo.Text = "";
-            txbReceptionRevueGenre.Text = "";
-            txbReceptionRevuePublic.Text = "";
-            txbReceptionRevueRayon.Text = "";
-            txbReceptionRevueTitre.Text = "";
-            pcbReceptionRevueImage.Image = null;
+            ResetControles(
+                txbReceptionRevuePeriodicite,
+                txbReceptionRevueImage,
+                txbReceptionRevueDelaiMiseADispo,
+                txbReceptionRevueGenre,
+                txbReceptionRevuePublic,
+                txbReceptionRevueRayon,
+                txbReceptionRevueTitre,
+                pcbReceptionRevueImage
+            );
             RemplirReceptionExemplairesListe(null);
             AccesReceptionExemplaireGroupBox(false);
         }
 
         /// <summary>
-        /// Affichage des informations de la revue sélectionnée et les exemplaires
+        /// Affichage des informations de la revue sélectionnée et les exemplaires.
         /// </summary>
         /// <param name="revue">la revue</param>
         private void AfficheReceptionRevueInfos(Revue revue)
@@ -1097,36 +892,34 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Récupère et affiche les exemplaires d'une revue
+        /// Récupère et affiche les exemplaires d'une revue.
         /// </summary>
         private void AfficheReceptionExemplairesRevue()
         {
             string idDocuement = txbReceptionRevueNumero.Text;
-            lesExemplaires = controller.GetExemplairesRevue(idDocuement);
-            RemplirReceptionExemplairesListe(lesExemplaires);
+            exemplairesOriginaux = controller.GetExemplairesRevue(idDocuement);
+            RemplirReceptionExemplairesListe(exemplairesOriginaux);
             AccesReceptionExemplaireGroupBox(true);
         }
 
         /// <summary>
         /// Permet ou interdit l'accès à la gestion de la réception d'un exemplaire
-        /// et vide les objets graphiques
+        /// et vide les objets graphiques.
         /// </summary>
         /// <param name="acces">true ou false</param>
         private void AccesReceptionExemplaireGroupBox(bool acces)
         {
             grpReceptionExemplaire.Enabled = acces;
-            txbReceptionExemplaireImage.Text = "";
-            txbReceptionExemplaireNumero.Text = "";
-            pcbReceptionExemplaireImage.Image = null;
+            ResetControles(txbReceptionExemplaireImage, txbReceptionExemplaireNumero, pcbReceptionExemplaireImage);
             dtpReceptionExemplaireDate.Value = DateTime.Now;
         }
 
         /// <summary>
-        /// Recherche image sur disque (pour l'exemplaire à insérer)
+        /// Recherche image sur disque (pour l'exemplaire à insérer).
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnReceptionExemplaireImage_Click(object sender, EventArgs e)
+        private void BtnReceptionExemplaireImage_Click(object sender, EventArgs e)
         {
             string filePath = "";
             OpenFileDialog openFileDialog = new OpenFileDialog()
@@ -1151,11 +944,11 @@ namespace MediaTekDocuments.view
         }
 
         /// <summary>
-        /// Enregistrement du nouvel exemplaire
+        /// Enregistrement du nouvel exemplaire.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void btnReceptionExemplaireValider_Click(object sender, EventArgs e)
+        private void BtnReceptionExemplaireValider_Click(object sender, EventArgs e)
         {
             if (!txbReceptionExemplaireNumero.Text.Equals(""))
             {
@@ -1166,7 +959,9 @@ namespace MediaTekDocuments.view
                     string photo = txbReceptionExemplaireImage.Text;
                     string idEtat = ETATNEUF;
                     string idDocument = txbReceptionRevueNumero.Text;
-                    Exemplaire exemplaire = new Exemplaire(numero, dateAchat, photo, idEtat, idDocument);
+                    
+                    Exemplaire exemplaire = new(numero, dateAchat, photo, idEtat, idDocument);
+                    
                     if (controller.CreerExemplaire(exemplaire))
                     {
                         AfficheReceptionExemplairesRevue();
@@ -1178,66 +973,72 @@ namespace MediaTekDocuments.view
                 }
                 catch
                 {
-                    MessageBox.Show("le numéro de parution doit être numérique", "Information");
+                    MessageBox.Show("le numéro de parution doit être numérique", MessageInformation);
                     txbReceptionExemplaireNumero.Text = "";
                     txbReceptionExemplaireNumero.Focus();
                 }
             }
             else
             {
-                MessageBox.Show("numéro de parution obligatoire", "Information");
+                MessageBox.Show("numéro de parution obligatoire", MessageInformation);
             }
         }
 
         /// <summary>
-        /// Tri sur une colonne
+        /// Tri sur une colonne.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void dgvExemplairesListe_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
+        private void DgvExemplairesListe_ColumnHeaderMouseClick(object sender, DataGridViewCellMouseEventArgs e)
         {
             string titreColonne = dgvReceptionExemplairesListe.Columns[e.ColumnIndex].HeaderText;
-            List<Exemplaire> sortedList = new List<Exemplaire>();
+            List<Exemplaire> sortedList = [];
             switch (titreColonne)
             {
                 case "Numero":
-                    sortedList = lesExemplaires.OrderBy(o => o.Numero).Reverse().ToList();
+                    sortedList = exemplairesOriginaux.OrderBy(o => o.Numero).Reverse().ToList();
                     break;
                 case "DateAchat":
-                    sortedList = lesExemplaires.OrderBy(o => o.DateAchat).Reverse().ToList();
+                    sortedList = exemplairesOriginaux.OrderBy(o => o.DateAchat).Reverse().ToList();
                     break;
                 case "Photo":
-                    sortedList = lesExemplaires.OrderBy(o => o.Photo).ToList();
+                    sortedList = exemplairesOriginaux.OrderBy(o => o.Photo).ToList();
                     break;
             }
             RemplirReceptionExemplairesListe(sortedList);
         }
 
         /// <summary>
-        /// affichage de l'image de l'exemplaire suite à la sélection d'un exemplaire dans la liste
+        /// Affichage de l'image de l'exemplaire suite à la sélection d'un exemplaire dans la liste.
         /// </summary>
         /// <param name="sender"></param>
         /// <param name="e"></param>
-        private void dgvReceptionExemplairesListe_SelectionChanged(object sender, EventArgs e)
+        private void DgvReceptionExemplairesListe_SelectionChanged(object sender, EventArgs e)
         {
-            if (dgvReceptionExemplairesListe.CurrentCell != null)
+            if (bindingSourceExemplaires.Current is not Exemplaire exemplaire)
             {
-                Exemplaire exemplaire = (Exemplaire)bdgExemplairesListe.List[bdgExemplairesListe.Position];
-                string image = exemplaire.Photo;
-                try
-                {
-                    pcbReceptionExemplaireRevueImage.Image = Image.FromFile(image);
-                }
-                catch
-                {
-                    pcbReceptionExemplaireRevueImage.Image = null;
-                }
+                pcbReceptionExemplaireRevueImage.Image = null;
+                return;
             }
-            else
+
+            string image = exemplaire.Photo;
+
+            if (string.IsNullOrWhiteSpace(image) || !File.Exists(image))
+            {
+                pcbReceptionExemplaireRevueImage.Image = null;
+                return;
+            }
+
+            try
+            {
+                pcbReceptionExemplaireRevueImage.Image = Image.FromFile(image);
+            }
+            catch
             {
                 pcbReceptionExemplaireRevueImage.Image = null;
             }
         }
+
         #endregion
     }
 }
